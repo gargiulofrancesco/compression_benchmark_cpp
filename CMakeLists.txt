@@ -10,9 +10,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Add the external FSST submodule
 add_subdirectory(external/fsst)
 
-# Add the source directory
+# Add the source directory and define the executable
 add_executable(run_benchmark
-    src/main.cpp
+    src/run_benchmark.cpp
     src/fsst_compressor.cpp
 )
 
@@ -27,3 +27,6 @@ target_link_libraries(run_benchmark PRIVATE fsst)
 
 # Compiler flags for release builds
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+
+# Specify output directories
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
