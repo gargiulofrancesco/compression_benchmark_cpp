@@ -14,8 +14,8 @@ To set up and run the compression benchmark, follow the steps below:
 
 1. **Clone the repository** (if you haven't already):
 ```bash
-git clone <repository-url>
-cd CompressionBenchmark
+git clone --recurse-submodules <repository-url>
+cd compression_benchmark_cpp
 ```
 
 2. **Create a build folder and navigate into it**
