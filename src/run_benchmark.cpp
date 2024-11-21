@@ -10,6 +10,8 @@
 #include "fsst_compressor.h"
 #include "dataset_loader.h"
 
+using namespace std::chrono;
+
 struct BenchmarkResult {
     std::string dataset_name;
     std::string compressor_name;
@@ -26,11 +28,9 @@ BenchmarkResult benchmark(Compressor<CompressorType>& compressor,
                           const std::vector<uint8_t>& data, 
                           const std::vector<size_t>& end_positions, 
                           const std::vector<size_t>& queries) {
-    using namespace std::chrono;
-
+                        
     const double data_bytes = static_cast<double>(data.size());
     size_t random_access_bytes = 0;
-
     for (size_t i: queries) {
         size_t prev = (i == 0) ? 0 : end_positions[i - 1];
         random_access_bytes += end_positions[i] - prev;
@@ -50,7 +50,7 @@ BenchmarkResult benchmark(Compressor<CompressorType>& compressor,
     result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
 
     // Decompression
-    std::vector<uint8_t> buffer(data.size() + 1024);
+    std::vector<uint8_t> buffer(data.size() + 1024);    
     auto start_decompression = high_resolution_clock::now();
     compressor.decompress(buffer);
     auto end_decompression = high_resolution_clock::now();
@@ -61,7 +61,8 @@ BenchmarkResult benchmark(Compressor<CompressorType>& compressor,
     // Random Access
     double total_random_access_time = 0.0;
     for (size_t query : queries) {
-        buffer.clear();
+        size_t item_size = end_positions[query] - ((query == 0) ? 0 : end_positions[query - 1]);
+        buffer.resize(item_size);
         auto start_random_access = high_resolution_clock::now();
         compressor.get_item_at(query, buffer);
         auto end_random_access = high_resolution_clock::now();
@@ -164,64 +165,6 @@ void print_results(const std::vector<BenchmarkResult>& results) {
     }
 }
 
-/*
-int main() {
-    // Example input strings
-    std::vector<std::string> inputStrings = {"string1", "string2", "string3", "longer_string"};
-    
-    // Prepare data for compression (convert strings to uint8_t and track end positions)
-    std::vector<uint8_t> inputData;
-    std::vector<size_t> end_positions;
-    size_t total_size = 0;
-
-    for (const auto& str : inputStrings) {
-        total_size += str.size();
-        inputData.insert(inputData.end(), str.begin(), str.end());
-        end_positions.push_back(total_size);  // Track the end position of each string
-    }
-
-    // Create FSSTCompressor instance using the Compressor template
-    FSSTCompressor fsst = FSSTCompressor::create(total_size, end_positions.size());
-
-    // Perform compression
-    fsst.compress(inputData, end_positions);
-    std::cout << "Compression complete." << std::endl;
-
-    // Perform decompression
-    std::vector<uint8_t> decompressedData(total_size);
-    fsst.decompress(decompressedData);
-    std::cout << "Decompression complete." << std::endl;
-
-    // Output the decompressed data (convert it back to strings for display)
-    // For simplicity, assume each item is smaller than 1024 bytes in decompressed form
-    std::vector<std::string> decompressedStrings(inputStrings.size());
-    size_t start = 0;
-    for (size_t i = 0; i < inputStrings.size(); ++i) {
-        size_t end = end_positions[i];
-        std::string item(decompressedData.begin() + start, decompressedData.begin() + end);
-        decompressedStrings[i] = item;
-        start = end;
-    }
-
-    // Print out the decompressed strings
-    for (const auto& str : decompressedStrings) {
-        std::cout << "Decompressed string: " << str << std::endl;
-    }
-
-    // Retrieve a specific item at index 2 (for example)
-    std::vector<uint8_t> itemBuffer(1024);
-    fsst.get_item_at(2, itemBuffer); // Get item at index 2
-    std::cout << "Item at index 2: ";
-    for (uint8_t byte : itemBuffer) {
-        std::cout << byte;
-    }
-    std::cout << std::endl;
-
-    return 0;
-}
-*/
-
-
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         std::cerr << "Error: Missing directory argument. Usage is: " << argv[0] << " <directory>\n";
@@ -248,7 +191,6 @@ int main(int argc, char* argv[]) {
         for (const auto& dataset: datasets) {
             auto [name, data, end_positions] = process_dataset(dataset);
             auto queries = generate_queries(end_positions.size(), selectivity, seed);
-
             std::cout << "Benchmarking dataset: " << name << "\n";
 
             // Add new compressor types here
