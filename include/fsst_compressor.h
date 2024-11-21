@@ -15,8 +15,8 @@ public:
 
     // Derived class method implementations
     void compress(const std::vector<uint8_t>& data, const std::vector<size_t>& end_positions);
-    void decompress(std::vector<uint8_t>& buffer);
-    void get_item_at(size_t index, std::vector<uint8_t>& buffer);
+    void decompress(std::vector<uint8_t>& buffer) const;
+    void get_item_at(size_t index, std::vector<uint8_t>& buffer) const;
     size_t space_used_bytes() const;
     const char* name() const;
 };

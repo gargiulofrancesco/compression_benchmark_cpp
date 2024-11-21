@@ -4,12 +4,6 @@
 
 To set up and run the compression benchmark, follow the steps below:
 
-### Prerequisites
-
-- CMake 3.10 or higher
-- A C++17 compatible compiler
-- FSST library (included as a submodule)
-
 ### Steps to Build and Run:
 
 1. **Clone the repository** (if you haven't already):
@@ -26,15 +20,15 @@ cd build
 
 3. **Run CMake to configure the project:**
 ```bash
-cmake ..
+cmake -DCMAKE_BUILD_TYPE=Release ..
 ```
 
 4. **Build the project:**
 ```bash
-cmake --build .
+cmake --build . --config Release
 ```
 
 5. **Run the benchmark executable:**
 ```bash
-./bin/run_benchmark
+./run_benchmark
 ```

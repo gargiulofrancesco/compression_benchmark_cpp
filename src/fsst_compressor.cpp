@@ -57,45 +57,34 @@ void FSSTCompressor::compress(const std::vector<uint8_t>& data, const std::vecto
     fsst_import(&decoder, buffer);
 }
 
-void FSSTCompressor::decompress(std::vector<uint8_t>& buffer) {
-    size_t num_strings = offsets.size();
+// Assumes buffer has enough space to store the decompressed data
+void FSSTCompressor::decompress(std::vector<uint8_t>& buffer) const {
+    size_t max_decompressed_size = buffer.capacity(); 
 
-    for (size_t i = 0; i < num_strings; ++i) {
-        unsigned start = (i == 0) ? 0 : offsets[i - 1];
-        unsigned end = offsets[i];
-
-        // Reserve space for the decompressed data
-        size_t max_decompressed_size = 1024; // Adjustable estimate
-        size_t previous_size = buffer.size();
-        buffer.resize(previous_size + max_decompressed_size);
-
-        unsigned decompressed_length = fsst_decompress(
-            &decoder,
-            end - start,
-            compressed_data.data() + start,
-            max_decompressed_size,
-            reinterpret_cast<uint8_t*>(&buffer[previous_size])
-        );
-
-        // Adjust the buffer size to the actual decompressed length
-        buffer.resize(previous_size + decompressed_length);
-    }
+    unsigned decompressed_length = fsst_decompress(
+        &decoder,
+        offsets.back(),
+        compressed_data.data(),
+        max_decompressed_size,
+        buffer.data()
+    );
+ 
+    // Adjust the buffer size to the actual decompressed length
+    buffer.resize(decompressed_length);
 }
 
-void FSSTCompressor::get_item_at(size_t index, std::vector<uint8_t>& buffer) {
+// Assumes buffer has enough space to store the decompressed data
+void FSSTCompressor::get_item_at(size_t index, std::vector<uint8_t>& buffer) const {
     unsigned start = (index == 0) ? 0 : offsets[index - 1];
     unsigned end = offsets[index];
-
-    // Reserve space for the decompressed data
-    size_t max_decompressed_size = 1024; // Adjustable estimate
-    buffer.resize(max_decompressed_size);
+    size_t max_decompressed_size = buffer.capacity(); 
 
     unsigned decompressed_length = fsst_decompress(
         &decoder,
         end - start,
         compressed_data.data() + start,
         max_decompressed_size,
-        reinterpret_cast<uint8_t*>(buffer.data())
+        buffer.data()
     );
 
     // Adjust the buffer size to the actual decompressed length

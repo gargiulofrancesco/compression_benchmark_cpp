@@ -9,7 +9,6 @@ template <typename Derived>
 class Compressor {
 public:
     // Static method to create instances of Derived class
-    // Static factory method to create an instance of Derived
     static Derived create(size_t data_size, size_t n_elements) {
         return Derived(data_size, n_elements);
     }

@@ -17,4 +17,4 @@ Makefile
 build/
 
 # Submodule-related files
-.external/
+.external/fsst
