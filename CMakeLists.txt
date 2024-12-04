@@ -25,6 +25,12 @@ else()
 endif()
 
 # Add the source directory and define the executables
+add_executable(run_single_benchmark
+    src/run_single_benchmark.cpp
+    src/fsst_compressor.cpp
+    src/dataset_loader.cpp
+)
+
 add_executable(run_benchmark
     src/run_benchmark.cpp
     src/fsst_compressor.cpp
@@ -38,10 +44,12 @@ add_executable(test_correctness
 )
 
 # Include directories for executables
+target_include_directories(run_single_benchmark PRIVATE ${PROJECT_INCLUDE_DIRS})
 target_include_directories(run_benchmark PRIVATE ${PROJECT_INCLUDE_DIRS})
 target_include_directories(test_correctness PRIVATE ${PROJECT_INCLUDE_DIRS})
 
 # Link the FSST library
+target_link_libraries(run_single_benchmark PRIVATE fsst)
 target_link_libraries(run_benchmark PRIVATE fsst)
 target_link_libraries(test_correctness PRIVATE fsst)
 
@@ -63,6 +71,7 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${OPTIMIZA
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
 if(ipo_supported)
+    set_property(TARGET run_single_benchmark PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
     set_property(TARGET run_benchmark PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
     set_property(TARGET test_correctness PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
 else()

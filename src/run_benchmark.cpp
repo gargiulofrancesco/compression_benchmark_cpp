@@ -1,209 +1,166 @@
 #include <iostream>
-#include <iomanip>
+#include <fstream>
+#include <filesystem>
 #include <vector>
-#include <map>
 #include <string>
-#include <algorithm>
-#include <numeric>
-#include <chrono>
-#include <random>
+#include <cstdlib>
 #include "fsst_compressor.h"
 #include "dataset_loader.h"
 
-using namespace std::chrono;
+using json = nlohmann::json;
+namespace fs = std::filesystem;
 
-struct BenchmarkResult {
-    std::string dataset_name;
-    std::string compressor_name;
-    double compression_rate;
-    double compression_speed;
-    double decompression_speed;
-    double random_access_speed;
-    double average_random_access_time;
-};
+const std::vector<std::string> COMPRESSORS = {"FSST"};
+const std::string BENCHMARK_PATH = "./run_single_benchmark";
+const std::string OUTPUT_FILE = "benchmark_results.json";
+const size_t N_ITERATIONS = 5;
 
-template <typename CompressorType>
-BenchmarkResult benchmark(Compressor<CompressorType>& compressor, 
-                          const std::string& dataset_name, 
-                          const std::vector<uint8_t>& data, 
-                          const std::vector<size_t>& end_positions, 
-                          const std::vector<size_t>& queries) {
-                        
-    const double data_bytes = static_cast<double>(data.size());
-    size_t random_access_bytes = 0;
-    for (size_t i: queries) {
-        size_t prev = (i == 0) ? 0 : end_positions[i - 1];
-        random_access_bytes += end_positions[i] - prev;
-    }
-    
-    BenchmarkResult result;
-    result.dataset_name = dataset_name;
-    result.compressor_name = compressor.name();
-
-    // Compression
-    auto start_compression = high_resolution_clock::now();
-    compressor.compress(data, end_positions);
-    auto end_compression = high_resolution_clock::now();
-    auto compression_time = duration_cast<duration<double>>(end_compression - start_compression).count();
-
-    result.compression_rate = data_bytes / static_cast<double>(compressor.space_used_bytes());
-    result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
-
-    // Decompression
-    std::vector<uint8_t> buffer(data.size() + 1024);    
-    auto start_decompression = high_resolution_clock::now();
-    compressor.decompress(buffer);
-    auto end_decompression = high_resolution_clock::now();
-    auto decompression_time = duration_cast<duration<double>>(end_decompression - start_decompression).count();
-
-    result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
-
-    // Random Access
-    double total_random_access_time = 0.0;
-    for (size_t query : queries) {
-        size_t item_size = end_positions[query] - ((query == 0) ? 0 : end_positions[query - 1]);
-        buffer.resize(item_size);
-        auto start_random_access = high_resolution_clock::now();
-        compressor.get_item_at(query, buffer);
-        auto end_random_access = high_resolution_clock::now();
-        auto random_access_time = duration_cast<duration<double>>(end_random_access - start_random_access).count();
-        total_random_access_time += random_access_time;
-    }
-
-    result.random_access_speed = (static_cast<double>(random_access_bytes) / (1024.0 * 1024.0)) / total_random_access_time;
-    result.average_random_access_time = total_random_access_time / queries.size();
-
-    return result;
-}
-
-// Generate Queries Function
-std::vector<size_t> generate_queries(size_t n_elements, double selectivity, uint64_t seed) {
-    size_t n_queries = static_cast<size_t>(n_elements * selectivity);
-    std::vector<size_t> queries(n_elements);
-    std::iota(queries.begin(), queries.end(), 0);
-
-    std::mt19937 rng(seed);
-    std::shuffle(queries.begin(), queries.end(), rng);
-
-    queries.resize(n_queries);
-    std::sort(queries.begin(), queries.end());
-    return queries;
-}
-
-void print_results(const std::vector<BenchmarkResult>& results) {
-    // Group results by compressor name
-    std::map<std::string, std::vector<BenchmarkResult>> grouped_results;
+void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
+    // Group results by (compressor, dataset) pair
+    std::map<std::pair<std::string, std::string>, std::vector<BenchmarkResult>> grouped_results;
     for (const auto& result : results) {
-        grouped_results[result.compressor_name].push_back(result);
+        grouped_results[{result.compressor_name, result.dataset_name}].push_back(result);
     }
 
-    // Process each compressor group
-    for (const auto& [compressor, group] : grouped_results) {
-        std::vector<BenchmarkResult> sorted_group = group;
+    // Calculate averages and group by compressor
+    std::map<std::string, std::vector<BenchmarkResult>> compressor_groups;
+    std::map<std::string, BenchmarkResult> compressor_averages;
 
-        // Sort by dataset name
-        std::sort(sorted_group.begin(), sorted_group.end(),
-                  [](const BenchmarkResult& a, const BenchmarkResult& b) {
-                      return a.dataset_name < b.dataset_name;
-                  });
+    for (const auto& [key, group] : grouped_results) {
+        const auto& [compressor, dataset] = key;
+        size_t len = group.size();
+        double avg_compression_rate = 0, avg_compression_speed = 0, avg_decompression_speed = 0,
+               avg_random_access_speed = 0, avg_average_random_access_time = 0;
 
-        // Print header for this compressor
-        std::cout << "\nResults for Compressor: " << compressor << "\n";
-        std::cout << std::left
-                  << std::setw(20) << "Dataset"
-                  << std::setw(15) << "Comp Rate"
-                  << std::setw(20) << "Comp Speed (MB/s)"
-                  << std::setw(20) << "Decomp Speed (MB/s)"
-                  << std::setw(25) << "Rand Acc Speed (MB/s)"
-                  << std::setw(20) << "Avg Rand Time (s)" << "\n";
-        std::cout << std::string(120, '-') << "\n";
-
-        // Print results for each dataset in the group
-        for (const auto& result : sorted_group) {
-            std::cout << std::left
-                      << std::setw(20) << result.dataset_name
-                      << std::setw(15) << std::fixed << std::setprecision(3) << result.compression_rate
-                      << std::setw(20) << std::fixed << std::setprecision(2) << result.compression_speed
-                      << std::setw(20) << std::fixed << std::setprecision(2) << result.decompression_speed
-                      << std::setw(25) << std::fixed << std::setprecision(2) << result.random_access_speed
-                      << std::setw(20) << std::fixed << std::setprecision(9) << result.average_random_access_time
-                      << "\n";
+        for (const auto& result : group) {
+            avg_compression_rate += result.compression_rate;
+            avg_compression_speed += result.compression_speed;
+            avg_decompression_speed += result.decompression_speed;
+            avg_random_access_speed += result.random_access_speed;
+            avg_average_random_access_time += result.average_random_access_time;
         }
 
-        // Calculate and print averages
-        size_t n = sorted_group.size();
-        double avg_compression_rate = std::accumulate(sorted_group.begin(), sorted_group.end(), 0.0,
-                                                      [](double sum, const BenchmarkResult& r) {
-                                                          return sum + r.compression_rate;
-                                                      }) / n;
-        double avg_compression_speed = std::accumulate(sorted_group.begin(), sorted_group.end(), 0.0,
-                                                       [](double sum, const BenchmarkResult& r) {
-                                                           return sum + r.compression_speed;
-                                                       }) / n;
-        double avg_decompression_speed = std::accumulate(sorted_group.begin(), sorted_group.end(), 0.0,
-                                                         [](double sum, const BenchmarkResult& r) {
-                                                             return sum + r.decompression_speed;
-                                                         }) / n;
-        double avg_random_access_speed = std::accumulate(sorted_group.begin(), sorted_group.end(), 0.0,
-                                                         [](double sum, const BenchmarkResult& r) {
-                                                             return sum + r.random_access_speed;
-                                                         }) / n;
-        double avg_average_random_access_time = std::accumulate(sorted_group.begin(), sorted_group.end(), 0.0,
-                                                                [](double sum, const BenchmarkResult& r) {
-                                                                    return sum + r.average_random_access_time;
-                                                                }) / n;
-
-        std::cout << std::string(120, '-') << "\n";
-        std::cout << std::left
-                  << std::setw(20) << "AVERAGE"
-                  << std::setw(15) << std::fixed << std::setprecision(3) << avg_compression_rate
-                  << std::setw(20) << std::fixed << std::setprecision(2) << avg_compression_speed
-                  << std::setw(20) << std::fixed << std::setprecision(2) << avg_decompression_speed
-                  << std::setw(25) << std::fixed << std::setprecision(2) << avg_random_access_speed
-                  << std::setw(20) << std::fixed << std::setprecision(9) << avg_average_random_access_time
-                  << "\n";
+        BenchmarkResult averaged_result = {
+            dataset,
+            compressor,
+            avg_compression_rate / len,
+            avg_compression_speed / len,
+            avg_decompression_speed / len,
+            avg_random_access_speed / len,
+            avg_average_random_access_time / len
+        };
+        compressor_groups[compressor].push_back(averaged_result);
     }
+
+    // Calculate overall averages for each compressor
+    for (const auto& [compressor, results] : compressor_groups) {
+        size_t len = results.size();
+        double overall_avg_compression_rate = 0, overall_avg_compression_speed = 0, 
+               overall_avg_decompression_speed = 0, overall_avg_random_access_speed = 0, 
+               overall_avg_random_access_time = 0;
+
+        for (const auto& result : results) {
+            overall_avg_compression_rate += result.compression_rate;
+            overall_avg_compression_speed += result.compression_speed;
+            overall_avg_decompression_speed += result.decompression_speed;
+            overall_avg_random_access_speed += result.random_access_speed;
+            overall_avg_random_access_time += result.average_random_access_time;
+        }
+
+        compressor_averages[compressor] = {
+            "AVERAGE",
+            compressor,
+            overall_avg_compression_rate / len,
+            overall_avg_compression_speed / len,
+            overall_avg_decompression_speed / len,
+            overall_avg_random_access_speed / len,
+            overall_avg_random_access_time / len
+        };
+    }
+
+    // Print grouped and averaged results
+    for (const auto& [compressor, results] : compressor_groups) {
+        std::cout << "\nResults for Compressor: " << compressor << "\n";
+        std::cout << std::setw(20) << "Dataset"
+                  << std::setw(12) << "Comp Rate"
+                  << std::setw(18) << "Comp Speed (MB/s)"
+                  << std::setw(18) << "Decomp Speed (MB/s)"
+                  << std::setw(18) << "Random Access Speed (MB/s)"
+                  << std::setw(24) << "Avg Random Access Time (ns)" << "\n";
+
+        for (const auto& result : results) {
+            std::cout << std::setw(20) << result.dataset_name
+                      << std::setw(12) << std::fixed << std::setprecision(3) << result.compression_rate
+                      << std::setw(18) << std::fixed << std::setprecision(2) << result.compression_speed
+                      << std::setw(18) << std::fixed << std::setprecision(2) << result.decompression_speed
+                      << std::setw(18) << std::fixed << std::setprecision(2) << result.random_access_speed
+                      << std::setw(24) << std::fixed << std::setprecision(0) << (result.average_random_access_time * 1e9) << "\n";
+        }
+
+        // Print the overall averages row
+        const auto& avg_result = compressor_averages[compressor];
+        std::cout << std::setw(20) << avg_result.dataset_name
+                  << std::setw(12) << std::fixed << std::setprecision(3) << avg_result.compression_rate
+                  << std::setw(18) << std::fixed << std::setprecision(2) << avg_result.compression_speed
+                  << std::setw(18) << std::fixed << std::setprecision(2) << avg_result.decompression_speed
+                  << std::setw(18) << std::fixed << std::setprecision(2) << avg_result.random_access_speed
+                  << std::setw(24) << std::fixed << std::setprecision(0) << (avg_result.average_random_access_time * 1e9) << "\n";
+    }
+}
+
+std::vector<BenchmarkResult> read_results(const std::string& file_path) {
+    std::vector<BenchmarkResult> results;
+
+    if (fs::exists(file_path)) {
+        std::ifstream file(file_path);
+        if (file.is_open()) {
+            try {
+                json j;
+                file >> j;
+                results = j.get<std::vector<BenchmarkResult>>();
+            } catch (const json::exception& e) {
+                std::cerr << "Error parsing results file '" << file_path << "': " << e.what() << std::endl;
+            }
+        }
+    }
+    return results;
 }
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Error: Missing directory argument. Usage is: " << argv[0] << " <directory>\n";
+        std::cerr << "Error: Missing directory argument. Usage: " << argv[0] << " <directory>\n";
         return 1;
     }
 
-    std::filesystem::path directory(argv[1]);
+    fs::path directory(argv[1]);
 
-    // Check if the path is a valid directory
-    if (!std::filesystem::exists(directory) || !std::filesystem::is_directory(directory)) {
+    if (!fs::exists(directory) || !fs::is_directory(directory)) {
         std::cerr << "Error: " << directory << " is not a valid directory.\n";
         return 1;
     }
 
-    double selectivity = 0.15;
-    uint64_t seed = 42;
-    std::vector<BenchmarkResult> results;
-
-    try {
-        // Load the dataset from the JSON files in the directory
-        std::vector<Dataset> datasets = load_datasets(directory);
-        
-        // Process each dataset
-        for (const auto& dataset: datasets) {
-            auto [name, data, end_positions] = process_dataset(dataset);
-            auto queries = generate_queries(end_positions.size(), selectivity, seed);
-            std::cout << "Benchmarking dataset: " << name << "\n";
-
-            // Add new compressor types here
-            FSSTCompressor fsst = FSSTCompressor::create(data.size(), end_positions.size());
-            BenchmarkResult result = benchmark(fsst, name, data, end_positions, queries);
-            results.push_back(result);
-        }
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << "\n";
-        return 1;
+    if (fs::exists(OUTPUT_FILE)) {
+        fs::remove(OUTPUT_FILE);
     }
 
-    print_results(results);
+    for (const auto& entry: fs::directory_iterator(directory)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".json") {
+            std::string dataset_path = entry.path().string();
+            std::cout << "Processing dataset \"" << dataset_path << "\"\n";
+
+            for (const auto& compressor: COMPRESSORS) {
+                for (size_t i = 0; i < N_ITERATIONS; ++i) {
+                    int status = std::system((BENCHMARK_PATH + " " + dataset_path + " " + compressor + " " + OUTPUT_FILE).c_str());
+                    if (status != 0) {
+                        std::cerr << "Benchmark failed for dataset '" << dataset_path << "' with compressor '" << compressor << "'.\n";
+                    }
+                }
+            }
+        }
+    }
+
+    auto results = read_results(OUTPUT_FILE);
+    print_benchmark_results(results);
 
     return 0;
 }

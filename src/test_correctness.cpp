@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
         
         // Process each dataset
         for (const auto& dataset: datasets) {
-            auto [name, data, end_positions] = process_dataset(dataset);
+            auto [name, data, end_positions, queries] = process_dataset(dataset);
             std::cout << "Testing dataset: " << name << "\n";
 
             // Add new compressor types here

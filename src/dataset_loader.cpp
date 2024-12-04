@@ -15,6 +15,7 @@ Dataset Dataset::load(const fs::path& path) {
     Dataset dataset;
     dataset.dataset_name = j.at("dataset_name").get<std::string>();
     dataset.data = j.at("data").get<std::vector<std::string>>();
+    dataset.queries = j.at("queries").get<std::vector<size_t>>();
 
     return dataset;
 }
@@ -31,7 +32,7 @@ std::vector<Dataset> load_datasets(const fs::path& dir) {
     return datasets;
 }
 
-std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>> process_dataset(const Dataset& dataset) {
+std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>> process_dataset(const Dataset& dataset) {
     const std::string& dataset_name = dataset.dataset_name;
 
     std::vector<uint8_t> data;
@@ -44,5 +45,5 @@ std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>> process_datas
         end_positions.push_back(current_position);
     }
 
-    return {dataset_name, data, end_positions};
+    return {dataset_name, data, end_positions, dataset.queries};
 }
