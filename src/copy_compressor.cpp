@@ -1,17 +1,12 @@
 #include "copy_compressor.h"
 #include <cstring>
-#include <iostream>
 
-CopyCompressor::CopyCompressor(size_t data_size, size_t n_elements) {
-    compressed_data.reserve(data_size);
-    offsets.reserve(n_elements);
+CopyCompressor::CopyCompressor(size_t data_size, size_t n_elements)
+    : compressed_data(data_size), offsets(n_elements) {
+    // Memory is allocated and initialized upfront to avoid runtime overhead.
 }
 
 void CopyCompressor::compress(const std::vector<uint8_t>& data, const std::vector<size_t>& end_positions) {
-    // Adjust the vector sizes
-    compressed_data.resize(data.size());
-    offsets.resize(end_positions.size());
-
     // Copy raw data into the allocated memory
     std::memcpy(compressed_data.data(), data.data(), data.size());
     std::memcpy(offsets.data(), end_positions.data(), end_positions.size() * sizeof(size_t));

@@ -1,9 +1,9 @@
 #include "fsst_compressor.h"
 #include <cstring>
 
-FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements) {
-    compressed_data.reserve(data_size);
-    offsets.reserve(n_elements);
+FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements)
+    : compressed_data(data_size), offsets(n_elements) {
+    // Memory is allocated and initialized upfront to avoid runtime overhead.
 }
 
 void FSSTCompressor::compress(const std::vector<uint8_t>& data, const std::vector<size_t>& end_positions) {
