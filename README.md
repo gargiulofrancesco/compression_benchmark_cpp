@@ -30,5 +30,5 @@ cmake --build . --config Release
 
 5. **Run the benchmark executable:**
 ```bash
-./run_benchmark
+./run_benchmark <directory>
 ```
