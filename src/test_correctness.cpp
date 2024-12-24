@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include "copy_compressor.h"
 #include "fsst_compressor.h"
 #include "dataset_loader.h"
 
@@ -17,21 +18,21 @@ void test(Compressor<CompressorType>& compressor,
     compressor.decompress(buffer);
     for (size_t i = 0; i < data.size(); ++i) {
         if (data[i] != buffer[i]) {
-            std::cerr << "Error: Decompression failed at index " << i << "\n";
+            std::cerr << "Error: Decompression failed at index " << i << " for compressor " << compressor.name() << std::endl;
             std::exit(EXIT_FAILURE);
         }
     }
 
     // Random Access Test
-    for(int i=0; i<end_positions.size(); i++) {
+    for(size_t i=0; i<end_positions.size(); i++) {
         size_t start = (i == 0) ? 0 : end_positions[i - 1];
         size_t end = end_positions[i];
         size_t item_size = end - start;
         buffer.resize(item_size);
         compressor.get_item_at(i, buffer);        
-        for(int j=0; j<end-start; j++) {
+        for(size_t j=0; j<end-start; j++) {
             if(data[start + j] != buffer[j]) {
-                std::cerr << "Error: Random Access failed at index " << i << "\n";
+                std::cerr << "Error: Random Access failed at index " << i << " for compressor " << compressor.name() << std::endl;
                 std::exit(EXIT_FAILURE);
             }
         }
@@ -62,6 +63,9 @@ int main(int argc, char* argv[]) {
             std::cout << "Testing dataset: " << name << "\n";
 
             // Add new compressor types here
+            CopyCompressor copy = CopyCompressor::create(data.size(), end_positions.size());
+            test(copy, name, data, end_positions);
+
             FSSTCompressor fsst = FSSTCompressor::create(data.size(), end_positions.size());
             test(fsst, name, data, end_positions);
         }

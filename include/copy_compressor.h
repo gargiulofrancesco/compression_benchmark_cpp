@@ -1,17 +1,15 @@
-#ifndef FSST_COMPRESSOR_H
-#define FSST_COMPRESSOR_H
+#ifndef COPY_COMPRESSOR_H
+#define COPY_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
-#include "fsst.h"  // FSST decoder header
 
-class FSSTCompressor : public Compressor<FSSTCompressor> {
+class CopyCompressor : public Compressor<CopyCompressor> {
 private:
     alignas(64) std::vector<uint8_t> compressed_data;
     alignas(64) std::vector<size_t> offsets;
-    fsst_decoder_t decoder;
 
 public:
-    FSSTCompressor(size_t data_size, size_t n_elements);
+    CopyCompressor(size_t data_size, size_t n_elements);
 
     // Derived class method implementations
     void compress(const std::vector<uint8_t>& data, const std::vector<size_t>& end_positions);
@@ -21,4 +19,4 @@ public:
     const char* name() const;
 };
 
-#endif // FSST_COMPRESSOR_H
+#endif // COPY_COMPRESSOR_H

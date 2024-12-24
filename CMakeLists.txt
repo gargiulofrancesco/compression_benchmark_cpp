@@ -27,18 +27,21 @@ endif()
 # Add the source directory and define the executables
 add_executable(run_single_benchmark
     src/run_single_benchmark.cpp
+    src/copy_compressor.cpp
     src/fsst_compressor.cpp
     src/dataset_loader.cpp
 )
 
 add_executable(run_benchmark
     src/run_benchmark.cpp
+    src/copy_compressor.cpp
     src/fsst_compressor.cpp
     src/dataset_loader.cpp
 )
 
 add_executable(test_correctness
     src/test_correctness.cpp
+    src/copy_compressor.cpp
     src/fsst_compressor.cpp
     src/dataset_loader.cpp
 )

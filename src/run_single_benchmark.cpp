@@ -4,6 +4,8 @@
 #include <string>
 #include <filesystem>
 #include <chrono>
+#include <sched.h>
+#include "copy_compressor.h"
 #include "fsst_compressor.h"
 #include "dataset_loader.h"
 
@@ -43,6 +45,11 @@ BenchmarkResult benchmark(CompressorType& compressor,
                           const std::vector<uint8_t>& data,
                           const std::vector<size_t>& end_positions,
                           const std::vector<size_t>& queries) {
+    // Force memory alignment
+    alignas(64) std::vector<uint8_t> buffer(data.size() + 1024);
+    uint64_t dummy = 0;
+
+    // Calculate the size of data to access directly
     const double data_bytes = static_cast<double>(data.size());
     size_t random_access_bytes = 0;
     for (size_t i : queries) {
@@ -50,42 +57,71 @@ BenchmarkResult benchmark(CompressorType& compressor,
         random_access_bytes += end_positions[i] - prev;
     }
 
+    // Initialize benchmark results
     BenchmarkResult result;
     result.dataset_name = dataset_name;
     result.compressor_name = compressor.name();
 
     // Compression
     auto start_compression = high_resolution_clock::now();
-    compressor.compress(data, end_positions);
+    {
+        compressor.compress(data, end_positions);
+    }
     auto end_compression = high_resolution_clock::now();
-    double compression_time = duration_cast<duration<double>>(end_compression - start_compression).count();
+    std::atomic_thread_fence(std::memory_order_seq_cst);
 
+    double compression_time = duration_cast<duration<double>>(end_compression - start_compression).count();
     result.compression_rate = data_bytes / static_cast<double>(compressor.space_used_bytes());
     result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
 
     // Decompression
-    std::vector<uint8_t> buffer(data.size() + 1024);
     auto start_decompression = high_resolution_clock::now();
-    compressor.decompress(buffer);
+    {
+        compressor.decompress(buffer);
+    }
     auto end_decompression = high_resolution_clock::now();
-    double decompression_time = duration_cast<duration<double>>(end_decompression - start_decompression).count();
+    std::atomic_thread_fence(std::memory_order_seq_cst);
 
+    double decompression_time = duration_cast<duration<double>>(end_decompression - start_decompression).count();
     result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
+
+    // Prevent the compiler from optimizing
+    for (const auto& b : buffer) {
+        dummy ^= b;
+    }
 
     // Random Access
     double total_random_access_time = 0.0;
     for (size_t query : queries) {
         size_t item_size = end_positions[query] - ((query == 0) ? 0 : end_positions[query - 1]);
+        
+        // Clear the buffer
+        buffer.clear();
+        buffer.shrink_to_fit();
         buffer.resize(item_size);
+        
         auto start_random_access = high_resolution_clock::now();
-        compressor.get_item_at(query, buffer);
+        {
+            compressor.get_item_at(query, buffer);
+        }
         auto end_random_access = high_resolution_clock::now();
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+
         double random_access_time = duration_cast<duration<double>>(end_random_access - start_random_access).count();
         total_random_access_time += random_access_time;
+        
+        // Prevent the compiler from optimizing
+        for (const auto& b : buffer) {
+            dummy ^= b;
+        }
     }
 
     result.random_access_speed = (static_cast<double>(random_access_bytes) / (1024.0 * 1024.0)) / total_random_access_time;
     result.average_random_access_time = total_random_access_time / queries.size();
+
+    if (dummy == 0xDEADBEEF) {
+        std::cout << "This will never print but prevents optimization" << std::endl;
+    }
 
     return result;
 }
@@ -117,10 +153,15 @@ int main(int argc, char* argv[]) {
 
         // Initialize the compressor
         BenchmarkResult result;
-        if (compressor_name == "FSST") {
+        if (compressor_name == "fsst") {
             FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size());
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        } else {
+        } 
+        else if (compressor_name == "copy") {
+            CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else {
             std::cerr << "Unknown compressor: " << compressor_name << "\n";
             return 1;
         }

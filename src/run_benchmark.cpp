@@ -10,10 +10,10 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-const std::vector<std::string> COMPRESSORS = {"FSST"};
+const std::vector<std::string> COMPRESSORS = {"copy", "fsst"};
 const std::string BENCHMARK_PATH = "./run_single_benchmark";
 const std::string OUTPUT_FILE = "benchmark_results.json";
-const size_t N_ITERATIONS = 5;
+const size_t N_ITERATIONS = 15;
 
 void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
     // Group results by (compressor, dataset) pair
@@ -82,29 +82,29 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
     for (const auto& [compressor, results] : compressor_groups) {
         std::cout << "\nResults for Compressor: " << compressor << "\n";
         std::cout << std::setw(20) << "Dataset"
-                  << std::setw(12) << "Comp Rate"
-                  << std::setw(18) << "Comp Speed (MB/s)"
-                  << std::setw(18) << "Decomp Speed (MB/s)"
-                  << std::setw(18) << "Random Access Speed (MB/s)"
-                  << std::setw(24) << "Avg Random Access Time (ns)" << "\n";
+                  << std::setw(12) << "C. Rate"
+                  << std::setw(20) << "C. Speed (MB/s)"
+                  << std::setw(20) << "D. Speed (MB/s)"
+                  << std::setw(20) << "R.A. Speed (MB/s)"
+                  << std::setw(20) << "R.A. Time (ns)" << "\n";
 
         for (const auto& result : results) {
             std::cout << std::setw(20) << result.dataset_name
                       << std::setw(12) << std::fixed << std::setprecision(3) << result.compression_rate
-                      << std::setw(18) << std::fixed << std::setprecision(2) << result.compression_speed
-                      << std::setw(18) << std::fixed << std::setprecision(2) << result.decompression_speed
-                      << std::setw(18) << std::fixed << std::setprecision(2) << result.random_access_speed
-                      << std::setw(24) << std::fixed << std::setprecision(0) << (result.average_random_access_time * 1e9) << "\n";
+                      << std::setw(20) << std::fixed << std::setprecision(2) << result.compression_speed
+                      << std::setw(20) << std::fixed << std::setprecision(2) << result.decompression_speed
+                      << std::setw(20) << std::fixed << std::setprecision(2) << result.random_access_speed
+                      << std::setw(20) << std::fixed << std::setprecision(0) << (result.average_random_access_time * 1e9) << "\n";
         }
 
         // Print the overall averages row
         const auto& avg_result = compressor_averages[compressor];
         std::cout << std::setw(20) << avg_result.dataset_name
                   << std::setw(12) << std::fixed << std::setprecision(3) << avg_result.compression_rate
-                  << std::setw(18) << std::fixed << std::setprecision(2) << avg_result.compression_speed
-                  << std::setw(18) << std::fixed << std::setprecision(2) << avg_result.decompression_speed
-                  << std::setw(18) << std::fixed << std::setprecision(2) << avg_result.random_access_speed
-                  << std::setw(24) << std::fixed << std::setprecision(0) << (avg_result.average_random_access_time * 1e9) << "\n";
+                  << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.compression_speed
+                  << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.decompression_speed
+                  << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.random_access_speed
+                  << std::setw(20) << std::fixed << std::setprecision(0) << (avg_result.average_random_access_time * 1e9) << "\n";
     }
 }
 
