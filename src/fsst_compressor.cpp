@@ -1,12 +1,15 @@
 #include "fsst_compressor.h"
 #include <cstring>
+#include <limits>
 
-FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements)
-    : compressed_data(data_size), offsets(n_elements) {
-    // Memory is allocated and initialized upfront to avoid runtime overhead.
+#include <iostream>
+
+FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements) {
+    compressed_data.reserve(data_size);
+    offsets.reserve(n_elements);
 }
 
-void FSSTCompressor::compress(const std::vector<uint8_t>& data, const std::vector<size_t>& end_positions) {
+void FSSTCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
     // Preallocate vectors for compression
     size_t num_strings = end_positions.size();
     std::vector<size_t> row_lengths(num_strings);
@@ -19,15 +22,15 @@ void FSSTCompressor::compress(const std::vector<uint8_t>& data, const std::vecto
         size_t start = (i == 0) ? 0 : end_positions[i - 1];
         size_t end = end_positions[i];
         row_lengths[i] = end - start;
-        row_ptrs[i] = reinterpret_cast<const uint8_t*>(&data[start]);
+        row_ptrs[i] = data + start;
     }
 
     // Initialize encoder
     auto encoder = fsst_create(num_strings, row_lengths.data(), row_ptrs.data(), false);
 
     // Preallocate the compression buffer with a size large enough for the worst case
-    size_t total_length = data.size();
-    std::vector<uint8_t> compression_buffer(16 + 2 * total_length);
+    size_t data_size = end_positions.size() == 0 ? 0 : end_positions.back();
+    std::vector<uint8_t> compression_buffer(16 + 2 * data_size);
 
     // Perform compression
     fsst_compress(encoder, num_strings, row_lengths.data(), row_ptrs.data(),
@@ -35,9 +38,7 @@ void FSSTCompressor::compress(const std::vector<uint8_t>& data, const std::vecto
                     compressed_row_lengths.data(), compressed_row_ptrs.data());
 
     // Calculate the compressed data size
-    size_t compressed_length = compressed_row_ptrs[num_strings - 1] +
-                                        compressed_row_lengths[num_strings - 1] -
-                                        compression_buffer.data();
+    size_t compressed_length = compressed_row_ptrs[num_strings - 1] + compressed_row_lengths[num_strings - 1] - compression_buffer.data();
     compressed_data.resize(compressed_length);
     memcpy(compressed_data.data(), compression_buffer.data(), compressed_length);
 
@@ -58,37 +59,35 @@ void FSSTCompressor::compress(const std::vector<uint8_t>& data, const std::vecto
 }
 
 // Assumes buffer has enough space to store the decompressed data
-void FSSTCompressor::decompress(std::vector<uint8_t>& buffer) const {
-    size_t max_decompressed_size = buffer.capacity(); 
+size_t FSSTCompressor::decompress(uint8_t* buffer) const {
+    size_t max_decompressed_size = std::numeric_limits<size_t>::max();
 
-    unsigned decompressed_length = fsst_decompress(
+    size_t decompressed_length = fsst_decompress(
         &decoder,
         offsets.back(),
         compressed_data.data(),
         max_decompressed_size,
-        buffer.data()
+        buffer
     );
  
-    // Adjust the buffer size to the actual decompressed length
-    buffer.resize(decompressed_length);
+    return decompressed_length;
 }
 
 // Assumes buffer has enough space to store the decompressed data
-void FSSTCompressor::get_item_at(size_t index, std::vector<uint8_t>& buffer) const {
-    unsigned start = (index == 0) ? 0 : offsets[index - 1];
-    unsigned end = offsets[index];
-    size_t max_decompressed_size = buffer.capacity(); 
+size_t FSSTCompressor::get_item_at(size_t index, uint8_t* buffer) const {
+    size_t start = (index == 0) ? 0 : offsets[index - 1];
+    size_t end = offsets[index];
+    size_t max_decompressed_size = offsets.size() == 0 ? 0 : offsets.back();
 
-    unsigned decompressed_length = fsst_decompress(
+    size_t decompressed_length = fsst_decompress(
         &decoder,
         end - start,
         compressed_data.data() + start,
         max_decompressed_size,
-        buffer.data()
+        buffer
     );
 
-    // Adjust the buffer size to the actual decompressed length
-    buffer.resize(decompressed_length);
+    return decompressed_length;
 }
 
 size_t FSSTCompressor::space_used_bytes() const {

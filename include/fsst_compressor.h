@@ -6,17 +6,17 @@
 
 class FSSTCompressor : public Compressor<FSSTCompressor> {
 private:
-    alignas(64) std::vector<uint8_t> compressed_data;
-    alignas(64) std::vector<size_t> offsets;
+    std::vector<uint8_t> compressed_data;
+    std::vector<size_t> offsets;
     fsst_decoder_t decoder;
 
 public:
     FSSTCompressor(size_t data_size, size_t n_elements);
 
     // Derived class method implementations
-    void compress(const std::vector<uint8_t>& data, const std::vector<size_t>& end_positions);
-    void decompress(std::vector<uint8_t>& buffer) const;
-    void get_item_at(size_t index, std::vector<uint8_t>& buffer) const;
+    void compress(const uint8_t* data, const std::vector<size_t>& end_positions);
+    size_t decompress(uint8_t* buffer) const;
+    size_t get_item_at(size_t index, uint8_t* buffer) const;
     size_t space_used_bytes() const;
     const char* name() const;
 };

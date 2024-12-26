@@ -13,17 +13,18 @@ public:
         return Derived(data_size, n_elements);
     }
 
-    // Base class method calls the corresponding method in the Derived class using static_cast
-    void compress(const std::vector<uint8_t>& data, const std::vector<size_t>& end_positions) {
+    void compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
         static_cast<Derived*>(this)->compress(data, end_positions);
     }
 
-    void decompress(std::vector<uint8_t>& buffer) const {
-        static_cast<const Derived*>(this)->decompress(buffer);
+    // Returns the number of bytes written in buffer
+    size_t decompress(uint8_t* buffer) const {
+        return static_cast<const Derived*>(this)->decompress(buffer);
     }
 
-    void get_item_at(size_t index, std::vector<uint8_t>& buffer) const {
-        static_cast<const Derived*>(this)->get_item_at(index, buffer);
+    // Returns the number of bytes written in buffer
+    size_t get_item_at(size_t index, uint8_t* buffer) const {
+        return static_cast<const Derived*>(this)->get_item_at(index, buffer);
     }
 
     size_t space_used_bytes() const {

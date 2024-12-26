@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.10)
 project(CompressionBenchmark)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Add the external FSST submodule
@@ -29,6 +29,7 @@ add_executable(run_single_benchmark
     src/run_single_benchmark.cpp
     src/copy_compressor.cpp
     src/fsst_compressor.cpp
+    src/onpair16_compressor.cpp
     src/dataset_loader.cpp
 )
 
@@ -36,6 +37,7 @@ add_executable(run_benchmark
     src/run_benchmark.cpp
     src/copy_compressor.cpp
     src/fsst_compressor.cpp
+    src/onpair16_compressor.cpp
     src/dataset_loader.cpp
 )
 
@@ -43,6 +45,7 @@ add_executable(test_correctness
     src/test_correctness.cpp
     src/copy_compressor.cpp
     src/fsst_compressor.cpp
+    src/onpair16_compressor.cpp
     src/dataset_loader.cpp
 )
 

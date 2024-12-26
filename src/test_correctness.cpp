@@ -4,7 +4,9 @@
 #include <string>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
+#include "onpair16_compressor.h"
 #include "dataset_loader.h"
+#include "memory_buffer.h"
 
 template <typename CompressorType>
 void test(Compressor<CompressorType>& compressor, 
@@ -12,12 +14,14 @@ void test(Compressor<CompressorType>& compressor,
           const std::vector<uint8_t>& data, 
           const std::vector<size_t>& end_positions) {
 
+    MemoryBuffer buffer(data.size() + 1024);
+
     // Compression and Decompression Test
-    std::vector<uint8_t> buffer(data.size() + 1024);
-    compressor.compress(data, end_positions);
-    compressor.decompress(buffer);
+    compressor.compress(data.data(), end_positions);
+    size_t b_size = compressor.decompress(buffer.data());
+    buffer.set_size(b_size);
     for (size_t i = 0; i < data.size(); ++i) {
-        if (data[i] != buffer[i]) {
+        if (i >= buffer.size() || data[i] != buffer[i]) {
             std::cerr << "Error: Decompression failed at index " << i << " for compressor " << compressor.name() << std::endl;
             std::exit(EXIT_FAILURE);
         }
@@ -28,10 +32,13 @@ void test(Compressor<CompressorType>& compressor,
         size_t start = (i == 0) ? 0 : end_positions[i - 1];
         size_t end = end_positions[i];
         size_t item_size = end - start;
-        buffer.resize(item_size);
-        compressor.get_item_at(i, buffer);        
-        for(size_t j=0; j<end-start; j++) {
-            if(data[start + j] != buffer[j]) {
+
+        buffer.clear();
+        size_t b_size = compressor.get_item_at(i, buffer.data());  
+        buffer.set_size(b_size);
+
+        for(size_t j=0; j<item_size; j++) {
+            if(j >= buffer.size() || data[start + j] != buffer[j]) {
                 std::cerr << "Error: Random Access failed at index " << i << " for compressor " << compressor.name() << std::endl;
                 std::exit(EXIT_FAILURE);
             }
@@ -54,20 +61,29 @@ int main(int argc, char* argv[]) {
     }
 
     try {
-        // Load the dataset from the JSON files in the directory
-        std::vector<Dataset> datasets = load_datasets(directory);
-        
-        // Process each dataset
-        for (const auto& dataset: datasets) {
-            auto [name, data, end_positions, queries] = process_dataset(dataset);
-            std::cout << "Testing dataset: " << name << "\n";
+        for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".json") {
+                try {
+                    // Load and process one dataset at a time
+                    Dataset dataset = Dataset::load(entry.path());
 
-            // Add new compressor types here
-            CopyCompressor copy = CopyCompressor::create(data.size(), end_positions.size());
-            test(copy, name, data, end_positions);
+                    auto [name, data, end_positions, queries] = process_dataset(dataset);
+                    std::cout << "Testing dataset: " << name << "\n";
+                    
+                    // Add new compressor types here
+                    CopyCompressor copy = CopyCompressor::create(data.size(), end_positions.size());
+                    test(copy, name, data, end_positions);
 
-            FSSTCompressor fsst = FSSTCompressor::create(data.size(), end_positions.size());
-            test(fsst, name, data, end_positions);
+                    FSSTCompressor fsst = FSSTCompressor::create(data.size(), end_positions.size());
+                    test(fsst, name, data, end_positions);
+
+                    OnPair16Compressor onpair16 = OnPair16Compressor::create(data.size(), end_positions.size());
+                    test(onpair16, name, data, end_positions);
+
+                } catch (const std::exception& e) {
+                    std::cerr << "Error processing file " << entry.path() << ": " << e.what() << "\n";
+                }
+            }
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

@@ -7,7 +7,9 @@
 #include <sched.h>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
+#include "onpair16_compressor.h"
 #include "dataset_loader.h"
+#include "memory_buffer.h"
 
 using namespace std;
 using namespace std::chrono;
@@ -45,8 +47,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
                           const std::vector<uint8_t>& data,
                           const std::vector<size_t>& end_positions,
                           const std::vector<size_t>& queries) {
-    // Force memory alignment
-    alignas(64) std::vector<uint8_t> buffer(data.size() + 1024);
+    MemoryBuffer buffer(data.size() + 1024);
     uint64_t dummy = 0;
 
     // Calculate the size of data to access directly
@@ -65,7 +66,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
     // Compression
     auto start_compression = high_resolution_clock::now();
     {
-        compressor.compress(data, end_positions);
+        compressor.compress(data.data(), end_positions);
     }
     auto end_compression = high_resolution_clock::now();
     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -77,7 +78,8 @@ BenchmarkResult benchmark(CompressorType& compressor,
     // Decompression
     auto start_decompression = high_resolution_clock::now();
     {
-        compressor.decompress(buffer);
+        size_t b_size = compressor.decompress(buffer.data());
+        buffer.set_size(b_size);
     }
     auto end_decompression = high_resolution_clock::now();
     std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -86,23 +88,18 @@ BenchmarkResult benchmark(CompressorType& compressor,
     result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
 
     // Prevent the compiler from optimizing
-    for (const auto& b : buffer) {
-        dummy ^= b;
-    }
+    dummy ^= buffer.size();
 
     // Random Access
     double total_random_access_time = 0.0;
     for (size_t query : queries) {
-        size_t item_size = end_positions[query] - ((query == 0) ? 0 : end_positions[query - 1]);
-        
-        // Clear the buffer
+        size_t item_size = end_positions[query] - ((query == 0) ? 0 : end_positions[query - 1]);        
         buffer.clear();
-        buffer.shrink_to_fit();
-        buffer.resize(item_size);
         
         auto start_random_access = high_resolution_clock::now();
         {
-            compressor.get_item_at(query, buffer);
+            size_t b_size = compressor.get_item_at(query, buffer.data());
+            buffer.set_size(b_size);
         }
         auto end_random_access = high_resolution_clock::now();
         std::atomic_thread_fence(std::memory_order_seq_cst);
@@ -111,9 +108,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
         total_random_access_time += random_access_time;
         
         // Prevent the compiler from optimizing
-        for (const auto& b : buffer) {
-            dummy ^= b;
-        }
+        dummy ^= buffer.size();
     }
 
     result.random_access_speed = (static_cast<double>(random_access_bytes) / (1024.0 * 1024.0)) / total_random_access_time;
@@ -159,6 +154,10 @@ int main(int argc, char* argv[]) {
         } 
         else if (compressor_name == "copy") {
             CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "onpair16") {
+            OnPair16Compressor compressor = OnPair16Compressor::create(data.size(), end_positions.size());
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {
