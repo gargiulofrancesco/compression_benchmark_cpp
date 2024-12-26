@@ -2,13 +2,6 @@
 #include <cstring>
 #include <robin_hood.h>
 
-
-#include <chrono>
-#include <sched.h>
-#include <iostream>
-
-
-
 OnPair16Compressor::OnPair16Compressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
     offsets.reserve(n_elements);
@@ -17,20 +10,8 @@ OnPair16Compressor::OnPair16Compressor(size_t data_size, size_t n_elements) {
 }
 
 void OnPair16Compressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    LongestPrefixMatcher16<uint16_t> lpm;
-    auto start_training = std::chrono::high_resolution_clock::now();
-    lpm = train(data, end_positions);
-    auto end_training = std::chrono::high_resolution_clock::now();
-    double training_time = duration_cast<std::chrono::duration<double>>(end_training - start_training).count();
-    double training_speed = (static_cast<double>(end_positions.back()) / (1024.0 * 1024.0)) / training_time;
-    std::cout << "training time: " << training_time << ", training speed: " << training_speed << std::endl;
-
-    auto start_parsing = std::chrono::high_resolution_clock::now();
+    LongestPrefixMatcher16<uint16_t> lpm = train(data, end_positions);
     parse(data, end_positions, lpm);
-    auto end_parsing = std::chrono::high_resolution_clock::now();
-    double parsing_time = duration_cast<std::chrono::duration<double>>(end_parsing - start_parsing).count();
-    double parsing_speed = (static_cast<double>(end_positions.back()) / (1024.0 * 1024.0)) / parsing_time;
-    std::cout << "parsing time: " << parsing_time << ", parsing speed: " << parsing_speed << std::endl << std::endl;
 }
 
 // Assumes buffer has enough space to store the decompressed data
@@ -84,7 +65,7 @@ const char* OnPair16Compressor::name() const {
 }
 
 LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, FastPairHash> frequency;
+    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, PairHash> frequency;
     LongestPrefixMatcher16<uint16_t> lpm;   
     uint16_t next_token_id = 256;
 
@@ -100,7 +81,6 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
     // Iterate over end positions
     for (size_t end : end_positions) {
         if (next_token_id == 65535) {
-            std::cout << "dictionary full at " << pos << "/" << end_positions.back() << " (" << (static_cast<double>(pos)/static_cast<double>(end_positions.back())) * 100.0 <<  ")" <<std::endl;
             break; 
         }
 

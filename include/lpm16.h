@@ -10,21 +10,15 @@
 #include <functional>
 #include <robin_hood.h>
 
-struct FastPairHash {
-    static constexpr uint64_t k = 0x517cc1b727220a95;
-
+struct PairHash {
     // For pair<uint16_t, uint16_t>
     size_t operator()(const std::pair<uint16_t, uint16_t>& p) const noexcept {
-        // Pack the pair into a single 32-bit integer to hash
-        uint32_t combined = (static_cast<uint32_t>(p.first) << 16) | p.second;
-        return (combined * k) >> 32;
+        return robin_hood::hash<uint32_t>{}((static_cast<uint32_t>(p.first) << 16) | p.second);
     }
 
     // For pair<uint64_t, uint8_t>
     size_t operator()(const std::pair<uint64_t, uint8_t>& p) const noexcept {
-        // Combine the 64-bit value with the byte
-        uint64_t combined = (p.first << 8) | p.second;
-        return (combined * k) >> 32;
+        return robin_hood::hash<uint64_t>{}(p.first) ^ robin_hood::hash<uint8_t>{}(p.second);
     }
 };
 
@@ -43,7 +37,7 @@ private:
         0xFFFFFFFFFFFFFFFFULL  // 8 bytes
     };
 
-    using Dictionary = robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, V, FastPairHash>;
+    using Dictionary = robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, V, PairHash>;
     using Bucket = std::vector<std::pair<std::pair<uint64_t, uint8_t>, V>>;
     using BucketMap =  robin_hood::unordered_map<uint64_t, Bucket>;
 

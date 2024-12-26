@@ -12,9 +12,10 @@ add_subdirectory(external/fsst)
 
 # Define a reusable variable for include directories
 set(PROJECT_INCLUDE_DIRS
-    include          # Project headers
-    external/fsst    # External FSST headers
-    external/json    # nlohmann/json
+    include             # Project headers
+    external/fsst       # External FSST headers
+    external/json       # nlohmann/json
+    external/robin_hood # robin_hood hashing
 )
 
 # Define a reusable variable for optimization flags
