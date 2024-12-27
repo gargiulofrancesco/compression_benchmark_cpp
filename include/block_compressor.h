@@ -23,6 +23,7 @@ private:
     std::vector<uint8_t> compressed_data_;
     std::vector<size_t> item_end_positions_;
     mutable std::vector<uint8_t> block_cache_;
+    mutable int32_t block_cache_index_ = -1;
 
 public:
     BlockCompressor(size_t data_size, size_t n_elements)
@@ -150,6 +151,10 @@ private:
     }
 
     void decompress_block_to_cache(size_t block_index) const {
+        if (block_cache_index_ == block_index) {
+            return;
+        }
+
         const auto& block_metadata = blocks_metadata_[block_index];
         size_t start = block_index == 0 ? 0 : blocks_metadata_[block_index - 1].end_position;
         size_t compressed_size = block_metadata.end_position - start;
@@ -161,6 +166,8 @@ private:
             block_cache_.data(),
             block_metadata.uncompressed_size
         );
+
+        block_cache_index_ = static_cast<int32_t>(block_index);
     }
 };
 

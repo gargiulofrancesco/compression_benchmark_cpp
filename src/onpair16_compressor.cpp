@@ -32,6 +32,31 @@ size_t OnPair16Compressor::decompress(uint8_t* buffer) const {
     return size;
 }
 
+/*
+size_t OnPair16Compressor::decompress(uint8_t* buffer) const {
+    const uint8_t* dict_ptr = dictionary_data.data();
+    const uint32_t* offsets_ptr = dictionary_offsets.data();
+    size_t size = 0;
+
+    for (uint16_t token_id : compressed_data) {
+        size_t dict_start = offsets_ptr[token_id];
+        size_t dict_end = offsets_ptr[token_id + 1];
+        size_t length = dict_end - dict_start;
+
+        // Copy two 64-bit chunks (8 bytes each)
+        const uint64_t* dict_u64 = reinterpret_cast<const uint64_t*>(dict_ptr + dict_start);
+        uint64_t* buffer_u64 = reinterpret_cast<uint64_t*>(buffer + size);
+        
+        buffer_u64[0] = dict_u64[0];  // First 8 bytes
+        buffer_u64[1] = dict_u64[1];  // Next 8 bytes
+
+        size += length;
+    }
+
+    return size;
+}
+*/
+
 // Assumes buffer has enough space to store the decompressed data
 size_t OnPair16Compressor::get_item_at(size_t index, uint8_t* buffer) const {
     const uint8_t* dict_ptr = dictionary_data.data();
