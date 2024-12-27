@@ -7,6 +7,7 @@
 #include <sched.h>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
+#include "lz4_compressor.h"
 #include "onpair16_compressor.h"
 #include "dataset_loader.h"
 #include "memory_buffer.h"
@@ -148,12 +149,17 @@ int main(int argc, char* argv[]) {
 
         // Initialize the compressor
         BenchmarkResult result;
-        if (compressor_name == "fsst") {
+        if (compressor_name == "copy") {
+            CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "fsst") {
             FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size());
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         } 
-        else if (compressor_name == "copy") {
-            CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size());
+       
+        else if (compressor_name == "lz4") {
+            LZ4Compressor compressor = LZ4Compressor::create(data.size(), end_positions.size());
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "onpair16") {

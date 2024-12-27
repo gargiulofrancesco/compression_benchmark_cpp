@@ -4,6 +4,7 @@
 #include <string>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
+#include "lz4_compressor.h"
 #include "onpair16_compressor.h"
 #include "dataset_loader.h"
 #include "memory_buffer.h"
@@ -76,6 +77,9 @@ int main(int argc, char* argv[]) {
 
                     FSSTCompressor fsst = FSSTCompressor::create(data.size(), end_positions.size());
                     test(fsst, name, data, end_positions);
+
+                    LZ4Compressor lz4 = LZ4Compressor::create(data.size(), end_positions.size());
+                    test(lz4, name, data, end_positions);
 
                     OnPair16Compressor onpair16 = OnPair16Compressor::create(data.size(), end_positions.size());
                     test(onpair16, name, data, end_positions);
