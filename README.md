@@ -6,7 +6,19 @@ To set up and run the compression benchmark, follow the steps below:
 
 ### Steps to Build and Run:
 
-1. **Clone the repository** (if you haven't already):
+0. **Prerequisites**
+To run the benchmark, you must install the required compression libraries using vcpkg.
+```bash
+git clone https://github.com/microsoft/vcpkg.git
+cd vcpkg
+./bootstrap-vcpkg.sh
+```
+You will need to install the following libraries:
+```bash
+./vcpkg install brotli zlib lz4 liblzma zstd snappy
+```
+
+1. **Clone the repository**:
 ```bash
 git clone --recurse-submodules https://github.com/gargiulofrancesco/compression_benchmark_cpp.git
 cd compression_benchmark_cpp
@@ -20,7 +32,7 @@ cd build
 
 3. **Run CMake to configure the project:**
 ```bash
-cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Release ..
 ```
 
 4. **Build the project:**
@@ -30,5 +42,5 @@ cmake --build . --config Release
 
 5. **Run the benchmark executable:**
 ```bash
-./run_benchmark <directory>
+./run_benchmark /path/to/datasets_directory
 ```

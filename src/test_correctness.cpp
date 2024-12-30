@@ -5,6 +5,11 @@
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
 #include "lz4_compressor.h"
+#include "snappy_compressor.h"
+#include "xz_compressor.h"
+#include "brotli_compressor.h"
+#include "deflate_compressor.h"
+#include "zstd_compressor.h"
 #include "onpair16_compressor.h"
 #include "dataset_loader.h"
 #include "memory_buffer.h"
@@ -80,6 +85,21 @@ int main(int argc, char* argv[]) {
 
                     LZ4Compressor lz4 = LZ4Compressor::create(data.size(), end_positions.size());
                     test(lz4, name, data, end_positions);
+
+                    SnappyCompressor snappy = SnappyCompressor::create(data.size(), end_positions.size());
+                    test(snappy, name, data, end_positions);
+
+                    XZCompressor xz = XZCompressor::create(data.size(), end_positions.size());
+                    test(xz, name, data, end_positions);
+
+                    BrotliCompressor brotli = BrotliCompressor::create(data.size(), end_positions.size());
+                    test(brotli, name, data, end_positions);
+
+                    DeflateCompressor deflate = DeflateCompressor::create(data.size(), end_positions.size());
+                    test(deflate, name, data, end_positions);
+
+                    ZstdCompressor zstd = ZstdCompressor::create(data.size(), end_positions.size());
+                    test(zstd, name, data, end_positions);
 
                     OnPair16Compressor onpair16 = OnPair16Compressor::create(data.size(), end_positions.size());
                     test(onpair16, name, data, end_positions);

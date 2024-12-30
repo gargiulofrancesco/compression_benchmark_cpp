@@ -8,6 +8,11 @@
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
 #include "lz4_compressor.h"
+#include "snappy_compressor.h"
+#include "xz_compressor.h"
+#include "brotli_compressor.h"
+#include "deflate_compressor.h"
+#include "zstd_compressor.h"
 #include "onpair16_compressor.h"
 #include "dataset_loader.h"
 #include "memory_buffer.h"
@@ -153,15 +158,34 @@ int main(int argc, char* argv[]) {
             CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size());
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
-        else if (compressor_name == "fsst") {
-            FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size());
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        } 
-       
         else if (compressor_name == "lz4") {
             LZ4Compressor compressor = LZ4Compressor::create(data.size(), end_positions.size());
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
+        else if (compressor_name == "snappy") {
+            SnappyCompressor compressor = SnappyCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "xz") {
+            XZCompressor compressor = XZCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "zstd") {
+            ZstdCompressor compressor = ZstdCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "deflate") {
+            DeflateCompressor compressor = DeflateCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "brotli") {
+            BrotliCompressor compressor = BrotliCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "fsst") {
+            FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size());
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        } 
         else if (compressor_name == "onpair16") {
             OnPair16Compressor compressor = OnPair16Compressor::create(data.size(), end_positions.size());
             result = benchmark(compressor, dataset_name, data, end_positions, queries);

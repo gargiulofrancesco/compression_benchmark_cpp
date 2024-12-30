@@ -9,7 +9,7 @@
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
-const std::vector<std::string> COMPRESSORS = {"copy", "fsst", "lz4", "onpair16"};
+const std::vector<std::string> COMPRESSORS = {"copy", "fsst", "snappy", "xz", "zstd", "brotli", "deflate", "lz4", "onpair16"};
 const std::string BENCHMARK_PATH = "./run_single_benchmark";
 const std::string OUTPUT_FILE = "benchmark_results.json";
 const size_t N_ITERATIONS = 15;
