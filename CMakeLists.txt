@@ -7,6 +7,7 @@ project(CompressionBenchmark)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Libraries required for the project (installed via vcpkg)
 find_package(simdjson CONFIG REQUIRED)
 find_package(unofficial-brotli CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -20,42 +21,21 @@ add_subdirectory(external/fsst)
 
 # Define a reusable variable for include directories
 set(PROJECT_INCLUDE_DIRS
-    include             # Project headers
-    external/fsst       # External FSST headers
-    external/robin_hood # robin_hood hashing
+    include/compressors
+    include/utils
+    external/fsst
+    external/robin_hood
 )
 
-# Define a reusable variable for optimization flags
-if(NOT MSVC)
-    set(OPTIMIZATION_FLAGS "-O3 -DNDEBUG -flto")
-else()
-    set(OPTIMIZATION_FLAGS "/O2 /DNDEBUG /GL")
-endif()
-
-# Create a list of all executables
-set(PROJECT_EXECUTABLES
-    run_single_benchmark
-    run_benchmark
-    test_correctness
-)
-
-# Define common source files
-set(COMMON_SOURCES
-    src/copy_compressor.cpp
-    src/onpair16_compressor.cpp
-    src/dataset_loader.cpp
-    src/fsst_compressor.cpp
-    src/lz4_compressor.cpp
-    src/snappy_compressor.cpp
-    src/deflate_compressor.cpp
-    src/brotli_compressor.cpp
-    src/xz_compressor.cpp
-    src/zstd_compressor.cpp
-)
+# Source files
+file(GLOB PROJECT_EXECUTABLES /src/executables/*.cpp)
+file(GLOB COMPRESSOR_SOURCES src/compressors/*.cpp)
+file(GLOB UTILS_SOURCES src/utils/*.cpp)
+set(COMMON_SOURCES ${COMPRESSOR_SOURCES} ${UTILS_SOURCES})
 
 # Create targets with common properties
 foreach(executable ${PROJECT_EXECUTABLES})
-    add_executable(${executable} src/${executable}.cpp ${COMMON_SOURCES})
+    add_executable(${executable} src/executables/${executable}.cpp ${COMMON_SOURCES})
     target_include_directories(${executable} PRIVATE ${PROJECT_INCLUDE_DIRS})
     target_link_libraries(${executable} PRIVATE 
         simdjson::simdjson
@@ -70,13 +50,11 @@ foreach(executable ${PROJECT_EXECUTABLES})
     )
 endforeach()
 
-# Include CheckCXXCompilerFlag to detect compiler support for flags
-include(CheckCXXCompilerFlag)
-
-# Check for `-march=native` support and append it if supported
-check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
-if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+# Define a reusable variable for optimization flags
+if(NOT MSVC)
+    set(OPTIMIZATION_FLAGS "-O3 -DNDEBUG -flto")
+else()
+    set(OPTIMIZATION_FLAGS "/O2 /DNDEBUG /GL")
 endif()
 
 # Set release-specific compiler and linker flags
@@ -88,12 +66,21 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${OPTIMIZA
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
 if(ipo_supported)
-    set_property(TARGET run_single_benchmark PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-    set_property(TARGET run_benchmark PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-    set_property(TARGET test_correctness PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    foreach(executable ${PROJECT_EXECUTABLES})
+        set_property(TARGET ${executable} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endforeach()
 else()
     message(WARNING "IPO (LTO) is not supported: ${ipo_error}")
 endif()
+
+# Check for `-march=native` support and append it if supported
+check_cxx_compiler_flag("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
+if(COMPILER_SUPPORTS_MARCH_NATIVE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
+endif()
+
+# Include CheckCXXCompilerFlag to detect compiler support for flags
+include(CheckCXXCompilerFlag)
 
 # Set a default build type if not specified
 if(NOT CMAKE_BUILD_TYPE)
