@@ -1,4 +1,5 @@
 #include "dataset_loader.h"
+#include <stdexcept>
 
 using namespace simdjson;
 namespace fs = std::filesystem;

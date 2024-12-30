@@ -1,5 +1,6 @@
 #include "xz_compressor.h"
 #include <lzma.h>
+#include <stdexcept>
 
 XZCompressor::XZCompressor(size_t data_size, size_t n_elements)
     : BlockCompressor<XZCompressor>(data_size, n_elements) {}

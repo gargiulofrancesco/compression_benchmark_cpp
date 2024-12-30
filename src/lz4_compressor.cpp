@@ -1,5 +1,6 @@
 #include "lz4_compressor.h"
 #include <lz4.h>
+#include <stdexcept>
 
 LZ4Compressor::LZ4Compressor(size_t data_size, size_t n_elements)
     : BlockCompressor<LZ4Compressor>(data_size, n_elements) {}

@@ -1,5 +1,6 @@
 #include "zstd_compressor.h"
 #include <zstd.h>
+#include <stdexcept>
 
 ZstdCompressor::ZstdCompressor(size_t data_size, size_t n_elements)
     : BlockCompressor<ZstdCompressor>(data_size, n_elements) {}

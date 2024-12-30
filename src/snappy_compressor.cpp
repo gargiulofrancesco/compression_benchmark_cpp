@@ -1,5 +1,6 @@
 #include "snappy_compressor.h"
 #include <snappy.h>
+#include <stdexcept>
 
 SnappyCompressor::SnappyCompressor(size_t data_size, size_t n_elements)
     : BlockCompressor<SnappyCompressor>(data_size, n_elements) {}

@@ -1,6 +1,7 @@
 #include "brotli_compressor.h"
 #include <brotli/encode.h>
 #include <brotli/decode.h>
+#include <stdexcept>
 
 BrotliCompressor::BrotliCompressor(size_t data_size, size_t n_elements)
     : BlockCompressor<BrotliCompressor>(data_size, n_elements) {}

@@ -1,5 +1,6 @@
 #include "deflate_compressor.h"
 #include <zlib.h>
+#include <stdexcept>
 
 DeflateCompressor::DeflateCompressor(size_t data_size, size_t n_elements)
     : BlockCompressor<DeflateCompressor>(data_size, n_elements) {}

@@ -6,6 +6,7 @@
 #include <chrono>
 #include <sched.h>
 #include <simdjson.h>
+#include <stdexcept>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
 #include "lz4_compressor.h"
