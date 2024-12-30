@@ -28,16 +28,22 @@ set(PROJECT_INCLUDE_DIRS
 )
 
 # Source files
-file(GLOB PROJECT_EXECUTABLES /src/executables/*.cpp)
+file(GLOB PROJECT_EXECUTABLES src/executables/*.cpp) 
 file(GLOB COMPRESSOR_SOURCES src/compressors/*.cpp)
 file(GLOB UTILS_SOURCES src/utils/*.cpp)
 set(COMMON_SOURCES ${COMPRESSOR_SOURCES} ${UTILS_SOURCES})
 
 # Create targets with common properties
-foreach(executable ${PROJECT_EXECUTABLES})
-    add_executable(${executable} src/executables/${executable}.cpp ${COMMON_SOURCES})
-    target_include_directories(${executable} PRIVATE ${PROJECT_INCLUDE_DIRS})
-    target_link_libraries(${executable} PRIVATE 
+foreach(executable_path ${PROJECT_EXECUTABLES})
+    # Get the target name by removing the path and the extension
+    get_filename_component(executable_name ${executable_path} NAME_WE)
+    
+    # Create the executable target
+    add_executable(${executable_name} ${executable_path} ${COMMON_SOURCES})
+    
+    # Include directories and link libraries
+    target_include_directories(${executable_name} PRIVATE ${PROJECT_INCLUDE_DIRS})
+    target_link_libraries(${executable_name} PRIVATE 
         simdjson::simdjson
         fsst
         unofficial::brotli::brotlidec 
@@ -66,8 +72,12 @@ set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} ${OPTIMIZA
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
 if(ipo_supported)
-    foreach(executable ${PROJECT_EXECUTABLES})
-        set_property(TARGET ${executable} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    foreach(executable_path ${PROJECT_EXECUTABLES})
+        # Get the target name by removing the path and the extension
+        get_filename_component(executable_name ${executable_path} NAME_WE)
+        
+        # Enable IPO (LTO) for the target
+        set_property(TARGET ${executable_name} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
     endforeach()
 else()
     message(WARNING "IPO (LTO) is not supported: ${ipo_error}")

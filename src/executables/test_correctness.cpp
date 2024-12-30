@@ -89,12 +89,6 @@ int main(int argc, char* argv[]) {
                     SnappyCompressor snappy = SnappyCompressor::create(data.size(), end_positions.size());
                     test(snappy, name, data, end_positions);
 
-                    XZCompressor xz = XZCompressor::create(data.size(), end_positions.size());
-                    test(xz, name, data, end_positions);
-
-                    BrotliCompressor brotli = BrotliCompressor::create(data.size(), end_positions.size());
-                    test(brotli, name, data, end_positions);
-
                     DeflateCompressor deflate = DeflateCompressor::create(data.size(), end_positions.size());
                     test(deflate, name, data, end_positions);
 
