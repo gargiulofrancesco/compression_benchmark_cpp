@@ -7,7 +7,7 @@ project(CompressionBenchmark)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Find and include the compression libraries via vcpkg
+find_package(simdjson CONFIG REQUIRED)
 find_package(unofficial-brotli CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(lz4 CONFIG REQUIRED)
@@ -22,7 +22,6 @@ add_subdirectory(external/fsst)
 set(PROJECT_INCLUDE_DIRS
     include             # Project headers
     external/fsst       # External FSST headers
-    external/json       # nlohmann/json
     external/robin_hood # robin_hood hashing
 )
 
@@ -59,6 +58,7 @@ foreach(executable ${PROJECT_EXECUTABLES})
     add_executable(${executable} src/${executable}.cpp ${COMMON_SOURCES})
     target_include_directories(${executable} PRIVATE ${PROJECT_INCLUDE_DIRS})
     target_link_libraries(${executable} PRIVATE 
+        simdjson::simdjson
         fsst
         unofficial::brotli::brotlidec 
         unofficial::brotli::brotlienc

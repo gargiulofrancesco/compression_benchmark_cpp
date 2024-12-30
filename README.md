@@ -7,7 +7,7 @@ To set up and run the compression benchmark, follow the steps below:
 ### Steps to Build and Run:
 
 0. **Prerequisites**
-To run the benchmark, you must install the required compression libraries using vcpkg.
+To run the benchmark, you must install the required libraries using vcpkg.
 ```bash
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
@@ -15,7 +15,7 @@ cd vcpkg
 ```
 You will need to install the following libraries:
 ```bash
-./vcpkg install brotli zlib lz4 liblzma zstd snappy
+./vcpkg install simdjson brotli zlib lz4 liblzma zstd snappy
 ```
 
 1. **Clone the repository**:

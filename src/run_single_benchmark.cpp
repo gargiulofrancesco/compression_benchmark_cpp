@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <chrono>
 #include <sched.h>
+#include <simdjson.h>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
 #include "lz4_compressor.h"
@@ -19,19 +20,32 @@
 
 using namespace std;
 using namespace std::chrono;
-using json = nlohmann::json;
+using namespace simdjson;
 
 void append_result_to_file(const BenchmarkResult& result, const std::filesystem::path& output_file) {
     std::vector<BenchmarkResult> results;
 
     // Read existing results if the file exists
     if (std::filesystem::exists(output_file)) {
-        std::ifstream input(output_file);
-        if (input.is_open()) {
-            json existing_results;
-            input >> existing_results;
-            results = existing_results.get<std::vector<BenchmarkResult>>();
-            input.close();
+        try {
+            ondemand::parser parser;
+            padded_string json = padded_string::load(output_file.string());
+            ondemand::document doc = parser.iterate(json);
+            
+            // Parse existing results
+            for (ondemand::object res : doc.get_array()) {
+                BenchmarkResult br;
+                br.dataset_name = std::string(res["dataset_name"].get_string().value());
+                br.compressor_name = std::string(res["compressor_name"].get_string().value());
+                br.compression_rate = res["compression_rate"].get_double().value();
+                br.compression_speed = res["compression_speed"].get_double().value();
+                br.decompression_speed = res["decompression_speed"].get_double().value();
+                br.random_access_speed = res["random_access_speed"].get_double().value();
+                br.average_random_access_time = res["average_random_access_time"].get_double().value();
+                results.push_back(br);
+            }
+        } catch (const simdjson::simdjson_error& e) {
+            std::cerr << "Warning: Could not parse existing results: " << e.what() << std::endl;
         }
     }
 
@@ -43,7 +57,21 @@ void append_result_to_file(const BenchmarkResult& result, const std::filesystem:
     if (!output.is_open()) {
         throw std::runtime_error("Failed to open output file.");
     }
-    output << json(results).dump(4);
+
+    output << "[\n";
+    for (size_t i = 0; i < results.size(); ++i) {
+        const auto& r = results[i];
+        output << "    {\n";
+        output << "        \"dataset_name\": \"" << r.dataset_name << "\",\n";
+        output << "        \"compressor_name\": \"" << r.compressor_name << "\",\n";
+        output << "        \"compression_rate\": " << r.compression_rate << ",\n";
+        output << "        \"compression_speed\": " << r.compression_speed << ",\n";
+        output << "        \"decompression_speed\": " << r.decompression_speed << ",\n";
+        output << "        \"random_access_speed\": " << r.random_access_speed << ",\n";
+        output << "        \"average_random_access_time\": " << r.average_random_access_time;
+        output << "\n    }" << (i < results.size() - 1 ? "," : "") << "\n";
+    }
+    output << "]\n";
     output.close();
 }
 

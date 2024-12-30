@@ -4,9 +4,11 @@
 #include <vector>
 #include <string>
 #include <cstdlib>
+#include <map>
+#include <simdjson.h>
 #include "dataset_loader.h"
 
-using json = nlohmann::json;
+using namespace simdjson;
 namespace fs = std::filesystem;
 
 const std::vector<std::string> COMPRESSORS = {"copy", "fsst", "snappy", "xz", "zstd", "brotli", "deflate", "lz4", "onpair16"};
@@ -111,15 +113,24 @@ std::vector<BenchmarkResult> read_results(const std::string& file_path) {
     std::vector<BenchmarkResult> results;
 
     if (fs::exists(file_path)) {
-        std::ifstream file(file_path);
-        if (file.is_open()) {
-            try {
-                json j;
-                file >> j;
-                results = j.get<std::vector<BenchmarkResult>>();
-            } catch (const json::exception& e) {
-                std::cerr << "Error parsing results file '" << file_path << "': " << e.what() << std::endl;
+        try {
+            ondemand::parser parser;
+            padded_string json = padded_string::load(file_path);
+            ondemand::document doc = parser.iterate(json);
+            
+            for (ondemand::object result : doc.get_array()) {
+                BenchmarkResult br;
+                br.dataset_name = std::string(result["dataset_name"].get_string().value());
+                br.compressor_name = std::string(result["compressor_name"].get_string().value());
+                br.compression_rate = result["compression_rate"].get_double().value();
+                br.compression_speed = result["compression_speed"].get_double().value();
+                br.decompression_speed = result["decompression_speed"].get_double().value();
+                br.random_access_speed = result["random_access_speed"].get_double().value();
+                br.average_random_access_time = result["average_random_access_time"].get_double().value();
+                results.push_back(br);
             }
+        } catch (const simdjson::simdjson_error& e) {
+            std::cerr << "Error parsing results file '" << file_path << "': " << e.what() << std::endl;
         }
     }
     return results;

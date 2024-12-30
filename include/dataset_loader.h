@@ -6,7 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
-#include "json.hpp"
+#include "simdjson.h"
 
 struct BenchmarkResult {
     std::string dataset_name;
@@ -16,8 +16,6 @@ struct BenchmarkResult {
     double decompression_speed;
     double random_access_speed;
     double average_random_access_time;
-
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(BenchmarkResult, dataset_name, compressor_name, compression_rate, compression_speed, decompression_speed, random_access_speed, average_random_access_time)
 };
 
 struct Dataset {
