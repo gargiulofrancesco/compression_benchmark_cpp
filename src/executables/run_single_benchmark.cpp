@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -82,7 +83,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
                           const std::vector<uint8_t>& data,
                           const std::vector<size_t>& end_positions,
                           const std::vector<size_t>& queries) {
-    MemoryBuffer buffer(data.size() + 1024);
+    MemoryBuffer<uint8_t> buffer(data.size() + 1024);
     uint64_t dummy = 0;
 
     // Calculate the size of data to access directly

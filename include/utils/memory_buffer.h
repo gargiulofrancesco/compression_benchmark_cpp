@@ -1,70 +1,80 @@
 #ifndef MEMORYBUFFER_H
 #define MEMORYBUFFER_H
 
-#include <cstdint>
-#include <cstring>
-#include <iostream>
+#include <cstddef>
+#include <type_traits>
+#include <stdexcept>
 
+template<typename T>
 class MemoryBuffer {
 private:
-    uint8_t* buffer;   // Pointer to the allocated memory
-    size_t buf_capacity;   // Total capacity of the buffer
-    size_t current_size; // Current size of the used data
+    T* buffer;              // Pointer to the allocated memory
+    size_t buf_capacity;    // Total capacity in elements
+    size_t current_size;    // Current size in elements
 
 public:
     // Constructor
-    MemoryBuffer(size_t initial_capacity)
-        : buffer(nullptr), buf_capacity(initial_capacity), current_size(0) {
-        buffer = new uint8_t[buf_capacity];
-    }
+    explicit MemoryBuffer(size_t capacity) 
+        : buffer(new T[capacity])
+        , buf_capacity(capacity)
+        , current_size(0) 
+    {}
 
     // Destructor
     inline ~MemoryBuffer() {
         delete[] buffer;
     }
 
-    // Square bracket operator for non-const access
-    inline uint8_t& operator[](size_t index) {
+    // Square bracket operators
+    inline T& operator[](size_t index) {
+        if (index >= current_size) {
+            throw std::out_of_range("Index out of range");
+        }
         return buffer[index];
     }
 
-    // Square bracket operator for const access
-    inline const uint8_t& operator[](size_t index) const {
+    inline const T& operator[](size_t index) const {
+        if (index >= current_size) {
+            throw std::out_of_range("Index out of range");
+        }
         return buffer[index];
     }
 
-    // Access raw pointer
-   inline uint8_t* data() const {
+    // Raw data access
+    inline T* data() const {
         return buffer;
     }
 
-    // Get current size
+    // Size operations
     inline size_t size() const {
         return current_size;
     }
 
-    // Set current size (does not ensure bounds)
     inline void set_size(size_t new_size) {
+        if (new_size > buf_capacity) {
+            throw std::length_error("New size exceeds capacity");
+        }
         current_size = new_size;
     }
 
-    // Get total capacity
     inline size_t capacity() const {
         return buf_capacity;
     }
 
-    // Clear buffer (reset size to 0)
     inline void clear() {
         current_size = 0;
     }
 
-    // Prevent copy semantics (to avoid shallow copies)
+    // Prevent copying
     MemoryBuffer(const MemoryBuffer&) = delete;
     MemoryBuffer& operator=(const MemoryBuffer&) = delete;
 
-    // Allow move semantics
+    // Allow moving
     MemoryBuffer(MemoryBuffer&& other) noexcept
-        : buffer(other.buffer), buf_capacity(other.buf_capacity), current_size(other.current_size) {
+        : buffer(other.buffer)
+        , buf_capacity(other.buf_capacity)
+        , current_size(other.current_size) 
+    {
         other.buffer = nullptr;
         other.buf_capacity = 0;
         other.current_size = 0;

@@ -20,7 +20,7 @@ void test(Compressor<CompressorType>& compressor,
           const std::vector<uint8_t>& data, 
           const std::vector<size_t>& end_positions) {
 
-    MemoryBuffer buffer(data.size() + 1024);
+    MemoryBuffer<uint8_t> buffer(data.size() + 1024);
 
     // Compression and Decompression Test
     compressor.compress(data.data(), end_positions);
