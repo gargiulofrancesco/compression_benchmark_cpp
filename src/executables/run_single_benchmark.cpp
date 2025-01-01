@@ -84,7 +84,6 @@ BenchmarkResult benchmark(CompressorType& compressor,
                           const std::vector<size_t>& end_positions,
                           const std::vector<size_t>& queries) {
     MemoryBuffer<uint8_t> buffer(data.size() + 1024);
-    uint64_t dummy = 0;
 
     // Calculate the size of data to access directly
     const double data_bytes = static_cast<double>(data.size());
@@ -119,17 +118,16 @@ BenchmarkResult benchmark(CompressorType& compressor,
     }
     auto end_decompression = high_resolution_clock::now();
     std::atomic_thread_fence(std::memory_order_seq_cst);
+    assert(std::equal(buffer.data(), buffer.data() + buffer.size(), data.data()));
 
     double decompression_time = duration_cast<duration<double>>(end_decompression - start_decompression).count();
     result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
 
-    // Prevent the compiler from optimizing
-    dummy ^= buffer.size();
-
     // Random Access
     double total_random_access_time = 0.0;
     for (size_t query : queries) {
-        size_t item_size = end_positions[query] - ((query == 0) ? 0 : end_positions[query - 1]);        
+        size_t start_position = (query == 0) ? 0 : end_positions[query - 1];
+        size_t item_size = end_positions[query] - start_position;
         buffer.clear();
         
         auto start_random_access = high_resolution_clock::now();
@@ -139,20 +137,14 @@ BenchmarkResult benchmark(CompressorType& compressor,
         }
         auto end_random_access = high_resolution_clock::now();
         std::atomic_thread_fence(std::memory_order_seq_cst);
+        assert(std::equal(buffer.data(), buffer.data() + buffer.size(), data.data() + start_position));
 
         double random_access_time = duration_cast<duration<double>>(end_random_access - start_random_access).count();
         total_random_access_time += random_access_time;
-        
-        // Prevent the compiler from optimizing
-        dummy ^= buffer.size();
     }
 
     result.random_access_speed = (static_cast<double>(random_access_bytes) / (1024.0 * 1024.0)) / total_random_access_time;
     result.average_random_access_time = total_random_access_time / queries.size();
-
-    if (dummy == 0xDEADBEEF) {
-        std::cout << "This will never print but prevents optimization" << std::endl;
-    }
 
     return result;
 }

@@ -6,6 +6,7 @@
 #include <vector>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include "simdjson.h"
 
 struct BenchmarkResult {
@@ -28,5 +29,6 @@ struct Dataset {
 
 std::vector<Dataset> load_datasets(const std::filesystem::path& dir);
 std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>> process_dataset(const Dataset& dataset);
+void print_benchmark_results(const std::vector<BenchmarkResult>& results);
 
 #endif // DATASET_LOADER_H
