@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <chrono>
 #include <sched.h>
-#include <simdjson.h>
 #include <stdexcept>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
@@ -15,11 +14,7 @@
 #include "deflate_compressor.h"
 #include "zstd_compressor.h"
 #include "onpair16_compressor.h"
-#include "dataset_loader.h"
-
-using namespace std;
-using namespace std::chrono;
-using namespace simdjson;
+#include "benchmark_utils.h"
 
 template <typename CompressorType>
 BenchmarkResult benchmark(CompressorType& compressor,
@@ -43,25 +38,25 @@ BenchmarkResult benchmark(CompressorType& compressor,
     result.compressor_name = compressor.name();
 
     // Compression
-    auto start_compression = high_resolution_clock::now();
+    auto start_compression = std::chrono::high_resolution_clock::now();
     compressor.compress(data.data(), end_positions);
-    auto end_compression = high_resolution_clock::now();
+    auto end_compression = std::chrono::high_resolution_clock::now();
 
     std::atomic_thread_fence(std::memory_order_seq_cst);
-    double compression_time = duration_cast<duration<double>>(end_compression - start_compression).count();
+    double compression_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_compression - start_compression).count();
     result.compression_rate = data_bytes / static_cast<double>(compressor.space_used_bytes());
     result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
 
     // Decompression
-    auto start_decompression = high_resolution_clock::now();
+    auto start_decompression = std::chrono::high_resolution_clock::now();
     size_t b_size = compressor.decompress(buffer.data());
-    auto end_decompression = high_resolution_clock::now();
+    auto end_decompression = std::chrono::high_resolution_clock::now();
     
     std::atomic_thread_fence(std::memory_order_seq_cst);
     if (!std::equal(data.data(), data.data() + data.size(), buffer.data())) {
         throw std::runtime_error("Data mismatch during decompression for compressor: " + std::string(compressor.name()));
     }
-    double decompression_time = duration_cast<duration<double>>(end_decompression - start_decompression).count();
+    double decompression_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_decompression - start_decompression).count();
     result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
 
     // Random Access
@@ -71,15 +66,15 @@ BenchmarkResult benchmark(CompressorType& compressor,
         size_t end_position = end_positions[query];
         size_t item_size = end_position - start_position;
         
-        auto start_random_access = high_resolution_clock::now();
+        auto start_random_access = std::chrono::high_resolution_clock::now();
         size_t b_size = compressor.get_item_at(query, buffer.data());
-        auto end_random_access = high_resolution_clock::now();
+        auto end_random_access = std::chrono::high_resolution_clock::now();
         
         std::atomic_thread_fence(std::memory_order_seq_cst);
         if (!std::equal(data.data() + start_position, data.data() + end_position, buffer.data())) {
             throw std::runtime_error("Data mismatch during random access for compressor: " + std::string(compressor.name()));
         }
-        double random_access_time = duration_cast<duration<double>>(end_random_access - start_random_access).count();
+        double random_access_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_random_access - start_random_access).count();
         total_random_access_time += random_access_time;
     }
 
@@ -87,59 +82,6 @@ BenchmarkResult benchmark(CompressorType& compressor,
     result.average_random_access_time = total_random_access_time / queries.size();
 
     return result;
-}
-
-void append_result_to_file(const BenchmarkResult& result, const std::filesystem::path& output_file) {
-    std::vector<BenchmarkResult> results;
-
-    // Read existing results if the file exists
-    if (std::filesystem::exists(output_file)) {
-        try {
-            ondemand::parser parser;
-            padded_string json = padded_string::load(output_file.string());
-            ondemand::document doc = parser.iterate(json);
-            
-            // Parse existing results
-            for (ondemand::object res : doc.get_array()) {
-                BenchmarkResult br;
-                br.dataset_name = std::string(res["dataset_name"].get_string().value());
-                br.compressor_name = std::string(res["compressor_name"].get_string().value());
-                br.compression_rate = res["compression_rate"].get_double().value();
-                br.compression_speed = res["compression_speed"].get_double().value();
-                br.decompression_speed = res["decompression_speed"].get_double().value();
-                br.random_access_speed = res["random_access_speed"].get_double().value();
-                br.average_random_access_time = res["average_random_access_time"].get_double().value();
-                results.push_back(br);
-            }
-        } catch (const simdjson_error& e) {
-            std::cerr << "Warning: Could not parse existing results: " << e.what() << std::endl;
-        }
-    }
-
-    // Append the new result
-    results.push_back(result);
-
-    // Write back to the file
-    std::ofstream output(output_file);
-    if (!output.is_open()) {
-        throw std::runtime_error("Failed to open output file.");
-    }
-
-    output << "[\n";
-    for (size_t i = 0; i < results.size(); ++i) {
-        const auto& r = results[i];
-        output << "    {\n";
-        output << "        \"dataset_name\": \"" << r.dataset_name << "\",\n";
-        output << "        \"compressor_name\": \"" << r.compressor_name << "\",\n";
-        output << "        \"compression_rate\": " << r.compression_rate << ",\n";
-        output << "        \"compression_speed\": " << r.compression_speed << ",\n";
-        output << "        \"decompression_speed\": " << r.decompression_speed << ",\n";
-        output << "        \"random_access_speed\": " << r.random_access_speed << ",\n";
-        output << "        \"average_random_access_time\": " << r.average_random_access_time;
-        output << "\n    }" << (i < results.size() - 1 ? "," : "") << "\n";
-    }
-    output << "]\n";
-    output.close();
 }
 
 int main(int argc, char* argv[]) {
@@ -164,7 +106,7 @@ int main(int argc, char* argv[]) {
 
     try {
         // Load dataset
-        auto dataset = Dataset::load(dataset_path);
+        Dataset dataset = load_dataset(dataset_path);
         auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
 
         // Initialize the compressor
@@ -211,7 +153,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Append the result to the output file
-        append_result_to_file(result, output_file);
+        append_benchmark_result(result, output_file);
 
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

@@ -5,16 +5,17 @@
 FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements) {
     compressed_data.resize(data_size);
     offsets.resize(n_elements);
+
+    // Preallocate vectors for compression
+    row_lengths.resize(n_elements);
+    row_ptrs.resize(n_elements);
+    compressed_row_lengths.resize(n_elements);
+    compressed_row_ptrs.resize(n_elements + 1);
 }
 
 void FSSTCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    // Preallocate vectors for compression
     size_t num_strings = end_positions.size();
-    std::vector<size_t> row_lengths(num_strings);
-    std::vector<const uint8_t*> row_ptrs(num_strings);
-    std::vector<size_t> compressed_row_lengths(num_strings);
-    std::vector<uint8_t*> compressed_row_ptrs(num_strings + 1);
-
+    
     // Prepare row lengths and pointers based on end positions
     for (size_t i = 0; i < num_strings; ++i) {
         size_t start = (i == 0) ? 0 : end_positions[i - 1];

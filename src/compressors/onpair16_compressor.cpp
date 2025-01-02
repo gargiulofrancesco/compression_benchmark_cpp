@@ -25,14 +25,16 @@ size_t OnPair16Compressor::decompress(uint8_t* buffer) const {
         size_t dict_end = offsets_ptr[token_id + 1];
         size_t length = dict_end - dict_start;
 
-        __builtin_memcpy(buffer + size, dict_ptr + dict_start, MAX_LENGTH);
+        std::memcpy(buffer + size, dict_ptr + dict_start, MAX_LENGTH);
         size += length;
     }
 
     return size;
 }
 
-/*
+/* Alternative decompress functions
+
+// Variant 1: Copying two u64
 size_t OnPair16Compressor::decompress(uint8_t* buffer) const {
     const uint8_t* dict_ptr = dictionary_data.data();
     const uint32_t* offsets_ptr = dictionary_offsets.data();
@@ -74,7 +76,7 @@ size_t OnPair16Compressor::get_item_at(size_t index, uint8_t* buffer) const {
         size_t length = dict_end - dict_start;
 
         // Copy the dictionary entry to the buffer
-        __builtin_memcpy(buffer + size, dict_ptr + dict_start, MAX_LENGTH);
+        std::memcpy(buffer + size, dict_ptr + dict_start, MAX_LENGTH);
         size += length;
     }
 

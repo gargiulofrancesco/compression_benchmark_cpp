@@ -1,17 +1,17 @@
-#include "dataset_loader.h"
+#include "benchmark_utils.h"
+#include <fstream>
+#include <map>
 #include <stdexcept>
+#include "simdjson.h"
 
-using namespace simdjson;
-namespace fs = std::filesystem;
-
-Dataset Dataset::load(const fs::path& path) {
+Dataset load_dataset(const std::filesystem::path& path) {
     std::ifstream file(path);
     if (!file) {
         throw std::runtime_error("Failed to open file: " + path.string());
     }
 
-    ondemand::parser parser;
-    padded_string json = padded_string::load(path.string());
+    simdjson::ondemand::parser parser;
+    simdjson::padded_string json = simdjson::padded_string::load(path.string());
     
     auto doc = parser.iterate(json);
     Dataset dataset;
@@ -34,11 +34,11 @@ Dataset Dataset::load(const fs::path& path) {
     return dataset;
 }
 
-std::vector<Dataset> load_datasets(const fs::path& dir) {
+std::vector<Dataset> load_datasets(const std::filesystem::path& dir) {
     std::vector<Dataset> datasets;
-    for (const auto& entry : fs::directory_iterator(dir)) {
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
         if (entry.is_regular_file() && entry.path().extension() == ".json") {
-            datasets.push_back(Dataset::load(entry.path()));
+            datasets.push_back(load_dataset(entry.path()));
         }
     }
     return datasets;
@@ -57,6 +57,86 @@ std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>, std::vector<s
     }
     
     return {dataset_name, data, end_positions, dataset.queries};
+}
+
+std::vector<BenchmarkResult> read_benchmark_results(const std::filesystem::path& file_path) {
+    std::vector<BenchmarkResult> results;
+
+    if (std::filesystem::exists(file_path)) {
+        try {
+            simdjson::ondemand::parser parser;
+            simdjson::padded_string json = simdjson::padded_string::load(file_path.string());
+            simdjson::ondemand::document doc = parser.iterate(json);
+            
+            for (simdjson::ondemand::object result : doc.get_array()) {
+                BenchmarkResult br;
+                br.dataset_name = std::string(result["dataset_name"].get_string().value());
+                br.compressor_name = std::string(result["compressor_name"].get_string().value());
+                br.compression_rate = result["compression_rate"].get_double().value();
+                br.compression_speed = result["compression_speed"].get_double().value();
+                br.decompression_speed = result["decompression_speed"].get_double().value();
+                br.random_access_speed = result["random_access_speed"].get_double().value();
+                br.average_random_access_time = result["average_random_access_time"].get_double().value();
+                results.push_back(br);
+            }
+        } catch (const simdjson::simdjson_error& e) {
+            throw std::runtime_error("Error parsing results file '" + file_path.string() + ": " + e.what());
+        }
+    }
+    return results;
+}
+
+void append_benchmark_result(const BenchmarkResult& result, const std::filesystem::path& output_file) {
+    std::vector<BenchmarkResult> results;
+
+    // Read existing results if the file exists
+    if (std::filesystem::exists(output_file)) {
+        try {
+            simdjson::ondemand::parser parser;
+            simdjson::padded_string json = simdjson::padded_string::load(output_file.string());
+            simdjson::ondemand::document doc = parser.iterate(json);
+            
+            // Parse existing results
+            for (simdjson::ondemand::object res : doc.get_array()) {
+                BenchmarkResult br;
+                br.dataset_name = std::string(res["dataset_name"].get_string().value());
+                br.compressor_name = std::string(res["compressor_name"].get_string().value());
+                br.compression_rate = res["compression_rate"].get_double().value();
+                br.compression_speed = res["compression_speed"].get_double().value();
+                br.decompression_speed = res["decompression_speed"].get_double().value();
+                br.random_access_speed = res["random_access_speed"].get_double().value();
+                br.average_random_access_time = res["average_random_access_time"].get_double().value();
+                results.push_back(br);
+            }
+        } catch (const simdjson::simdjson_error& e) {
+            std::cerr << "Warning: Could not parse existing results: " << e.what() << std::endl;
+        }
+    }
+
+    // Append the new result
+    results.push_back(result);
+
+    // Write back to the file
+    std::ofstream output(output_file);
+    if (!output.is_open()) {
+        throw std::runtime_error("Failed to open output file.");
+    }
+
+    output << "[\n";
+    for (size_t i = 0; i < results.size(); ++i) {
+        const auto& r = results[i];
+        output << "    {\n";
+        output << "        \"dataset_name\": \"" << r.dataset_name << "\",\n";
+        output << "        \"compressor_name\": \"" << r.compressor_name << "\",\n";
+        output << "        \"compression_rate\": " << r.compression_rate << ",\n";
+        output << "        \"compression_speed\": " << r.compression_speed << ",\n";
+        output << "        \"decompression_speed\": " << r.decompression_speed << ",\n";
+        output << "        \"random_access_speed\": " << r.random_access_speed << ",\n";
+        output << "        \"average_random_access_time\": " << r.average_random_access_time;
+        output << "\n    }" << (i < results.size() - 1 ? "," : "") << "\n";
+    }
+    output << "]\n";
+    output.close();
 }
 
 void print_benchmark_results(const std::vector<BenchmarkResult>& results) {

@@ -1,13 +1,15 @@
-#ifndef DATASET_LOADER_H
-#define DATASET_LOADER_H
+#ifndef BENCHMARK_UTILS_H
+#define BENCHMARK_UTILS_H
 
-#include <cstddef>
 #include <string>
 #include <vector>
 #include <filesystem>
-#include <fstream>
-#include <map>
-#include "simdjson.h"
+
+struct Dataset {
+    std::string dataset_name;
+    std::vector<std::string> data;
+    std::vector<size_t> queries;
+};
 
 struct BenchmarkResult {
     std::string dataset_name;
@@ -19,16 +21,10 @@ struct BenchmarkResult {
     double average_random_access_time;
 };
 
-struct Dataset {
-    std::string dataset_name;
-    std::vector<std::string> data;
-    std::vector<size_t> queries;
-
-    static Dataset load(const std::filesystem::path& path);
-};
-
-std::vector<Dataset> load_datasets(const std::filesystem::path& dir);
+Dataset load_dataset(const std::filesystem::path& path);
 std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>> process_dataset(const Dataset& dataset);
+std::vector<BenchmarkResult> read_benchmark_results(const std::filesystem::path& file_path);
+void append_benchmark_result(const BenchmarkResult& result, const std::filesystem::path& output_file);
 void print_benchmark_results(const std::vector<BenchmarkResult>& results);
 
-#endif // DATASET_LOADER_H
+#endif // BENCHMARK_UTILS_H

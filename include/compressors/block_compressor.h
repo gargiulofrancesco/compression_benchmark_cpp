@@ -31,7 +31,7 @@ public:
         compressed_data_.reserve(data_size);
         blocks_metadata_.reserve(data_size / block_size_ + 1);
         item_end_positions_.reserve(n_elements);
-        block_cache_.reserve(block_size_);
+        block_cache_.resize(block_size_);
     }
 
     size_t compress_block(const uint8_t* block, size_t block_size) {
@@ -113,8 +113,6 @@ public:
 
         auto [item_start, item_end] = get_item_delimiters(block_index, index);
         size_t item_size = item_end - item_start;
-
-        // Use memcpy with raw pointers
         std::memcpy(buffer, block_cache_.data() + item_start, item_size);
 
         return item_size;

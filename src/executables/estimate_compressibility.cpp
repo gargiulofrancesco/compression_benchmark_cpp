@@ -7,7 +7,7 @@
 #include <iomanip>
 #include <cassert>
 #include <stdexcept>
-#include "dataset_loader.h"
+#include "benchmark_utils.h"
 
 // Compression libraries
 #include <lz4.h>
@@ -18,9 +18,6 @@
 #include <snappy.h>
 #include <zlib.h>
 #include <lzma.h>
-
-namespace fs = std::filesystem;
-using Clock = std::chrono::high_resolution_clock;
 
 const size_t N_ITER = 10;
 
@@ -70,7 +67,7 @@ void print_results(const std::vector<CompressionResult>& results, const std::str
 
 CompressionResult compress_lz4(const std::filesystem::path& path, int level) {
     // Load dataset
-    auto dataset = Dataset::load(path);
+    auto dataset = load_dataset(path);
     auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
     const double data_size_mb = data.size() / (1024.0 * 1024.0);
     
@@ -79,7 +76,7 @@ CompressionResult compress_lz4(const std::filesystem::path& path, int level) {
     std::vector<uint8_t> compressed_data(max_dst_size);
     
     // Compress
-    auto start = Clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     int compressed_size;
     if (level == 0) {
         // Use default LZ4 compression
@@ -105,12 +102,12 @@ CompressionResult compress_lz4(const std::filesystem::path& path, int level) {
     }
     compressed_data.resize(compressed_size);
     
-    auto compression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double compression_speed = data_size_mb / compression_duration;
     
     // Decompress
     std::vector<uint8_t> decompressed_data(data.size());
-    start = Clock::now();
+    start = std::chrono::high_resolution_clock::now();
     
     int decompressed_size = LZ4_decompress_safe(
         reinterpret_cast<const char*>(compressed_data.data()),
@@ -123,7 +120,7 @@ CompressionResult compress_lz4(const std::filesystem::path& path, int level) {
         throw std::runtime_error("LZ4 decompression failed");
     }
     
-    auto decompression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto decompression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
@@ -139,7 +136,7 @@ CompressionResult compress_lz4(const std::filesystem::path& path, int level) {
 
 CompressionResult compress_zstd(const std::filesystem::path& path, int level) {
     // Load dataset
-    auto dataset = Dataset::load(path);
+    auto dataset = load_dataset(path);
     auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
     const double data_size_mb = data.size() / (1024.0 * 1024.0);
     
@@ -148,7 +145,7 @@ CompressionResult compress_zstd(const std::filesystem::path& path, int level) {
     std::vector<uint8_t> compressed_data(max_dst_size);
     
     // Compress
-    auto start = Clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     size_t compressed_size = ZSTD_compress(
         compressed_data.data(), compressed_data.size(),
         data.data(), data.size(),
@@ -160,12 +157,12 @@ CompressionResult compress_zstd(const std::filesystem::path& path, int level) {
     }
     compressed_data.resize(compressed_size);
     
-    auto compression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double compression_speed = data_size_mb / compression_duration;
     
     // Decompress
     std::vector<uint8_t> decompressed_data(data.size());
-    start = Clock::now();
+    start = std::chrono::high_resolution_clock::now();
     
     size_t decompressed_size = ZSTD_decompress(
         decompressed_data.data(), decompressed_data.size(),
@@ -176,7 +173,7 @@ CompressionResult compress_zstd(const std::filesystem::path& path, int level) {
         throw std::runtime_error("Zstd decompression failed: " + std::string(ZSTD_getErrorName(decompressed_size)));
     }
     
-    auto decompression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto decompression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
@@ -192,7 +189,7 @@ CompressionResult compress_zstd(const std::filesystem::path& path, int level) {
 
 CompressionResult compress_deflate(const std::filesystem::path& path, int level) {
     // Load dataset
-    auto dataset = Dataset::load(path);
+    auto dataset = load_dataset(path);
     auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
     const double data_size_mb = data.size() / (1024.0 * 1024.0);
     
@@ -208,7 +205,7 @@ CompressionResult compress_deflate(const std::filesystem::path& path, int level)
     strm.next_out = compressed_data.data();
     strm.avail_out = compressed_data.size();
     
-    auto start = Clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     if (deflate(&strm, Z_FINISH) != Z_STREAM_END) {
         deflateEnd(&strm);
         throw std::runtime_error("Deflate compression failed");
@@ -218,7 +215,7 @@ CompressionResult compress_deflate(const std::filesystem::path& path, int level)
     compressed_data.resize(compressed_size);
     deflateEnd(&strm);
     
-    auto compression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double compression_speed = data_size_mb / compression_duration;
     
     // Decompress
@@ -230,7 +227,7 @@ CompressionResult compress_deflate(const std::filesystem::path& path, int level)
     strm.next_out = decompressed_data.data();
     strm.avail_out = decompressed_data.size();
     
-    start = Clock::now();
+    start = std::chrono::high_resolution_clock::now();
     if (inflate(&strm, Z_FINISH) != Z_STREAM_END) {
         inflateEnd(&strm);
         throw std::runtime_error("Deflate decompression failed");
@@ -238,7 +235,7 @@ CompressionResult compress_deflate(const std::filesystem::path& path, int level)
     
     inflateEnd(&strm);
     
-    auto decompression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto decompression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
@@ -254,7 +251,7 @@ CompressionResult compress_deflate(const std::filesystem::path& path, int level)
 
 CompressionResult compress_xz(const std::filesystem::path& path, int level) {
     // Load dataset
-    auto dataset = Dataset::load(path);
+    auto dataset = load_dataset(path);
     auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
     const double data_size_mb = data.size() / (1024.0 * 1024.0);
     
@@ -274,7 +271,7 @@ CompressionResult compress_xz(const std::filesystem::path& path, int level) {
     strm.next_out = compressed_data.data();
     strm.avail_out = compressed_data.size();
     
-    auto start = Clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     
     while (true) {
         ret = lzma_code(&strm, LZMA_FINISH);
@@ -298,7 +295,7 @@ CompressionResult compress_xz(const std::filesystem::path& path, int level) {
     }
     
     compressed_data.resize(strm.total_out);
-    auto compression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double compression_speed = data_size_mb / compression_duration;
     
     lzma_end(&strm);
@@ -317,7 +314,7 @@ CompressionResult compress_xz(const std::filesystem::path& path, int level) {
     strm.next_out = decompressed_data.data();
     strm.avail_out = decompressed_data.size();
     
-    start = Clock::now();
+    start = std::chrono::high_resolution_clock::now();
     
     ret = lzma_code(&strm, LZMA_FINISH);
     if (ret != LZMA_STREAM_END) {
@@ -325,7 +322,7 @@ CompressionResult compress_xz(const std::filesystem::path& path, int level) {
         throw std::runtime_error("LZMA decompression failed");
     }
     
-    auto decompression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto decompression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double decompression_speed = data_size_mb / decompression_duration;
     
     lzma_end(&strm);
@@ -343,7 +340,7 @@ CompressionResult compress_xz(const std::filesystem::path& path, int level) {
 
 CompressionResult compress_snappy(const std::filesystem::path& path) {
     // Load dataset
-    auto dataset = Dataset::load(path);
+    auto dataset = load_dataset(path);
     auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
     const double data_size_mb = data.size() / (1024.0 * 1024.0);
     
@@ -353,7 +350,7 @@ CompressionResult compress_snappy(const std::filesystem::path& path) {
     size_t compressed_size;
     
     // Compress
-    auto start = Clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     
     snappy::RawCompress(
         reinterpret_cast<const char*>(data.data()),
@@ -364,14 +361,14 @@ CompressionResult compress_snappy(const std::filesystem::path& path) {
     
     compressed_data.resize(compressed_size);
     
-    auto compression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double compression_speed = data_size_mb / compression_duration;
     
     // Decompress
     std::vector<uint8_t> decompressed_data(data.size());
     size_t decompressed_size;
     
-    start = Clock::now();
+    start = std::chrono::high_resolution_clock::now();
     
     if (!snappy::RawUncompress(
             reinterpret_cast<const char*>(compressed_data.data()),
@@ -380,7 +377,7 @@ CompressionResult compress_snappy(const std::filesystem::path& path) {
         throw std::runtime_error("Snappy decompression failed");
     }
     
-    auto decompression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto decompression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
@@ -396,7 +393,7 @@ CompressionResult compress_snappy(const std::filesystem::path& path) {
 
 CompressionResult compress_brotli(const std::filesystem::path& path, int level) {
     // Load dataset
-    auto dataset = Dataset::load(path);
+    auto dataset = load_dataset(path);
     auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
     const double data_size_mb = data.size() / (1024.0 * 1024.0);
     
@@ -406,7 +403,7 @@ CompressionResult compress_brotli(const std::filesystem::path& path, int level) 
     size_t encoded_size = compressed_size_bound;
     
     // Compress
-    auto start = Clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
     
     if (!BrotliEncoderCompress(
             level,
@@ -421,14 +418,14 @@ CompressionResult compress_brotli(const std::filesystem::path& path, int level) 
     
     compressed_data.resize(encoded_size);
     
-    auto compression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double compression_speed = data_size_mb / compression_duration;
     
     // Decompress
     std::vector<uint8_t> decompressed_data(data.size());
     size_t decoded_size = data.size();
     
-    start = Clock::now();
+    start = std::chrono::high_resolution_clock::now();
     
     if (!BrotliDecoderDecompress(
             encoded_size,
@@ -438,7 +435,7 @@ CompressionResult compress_brotli(const std::filesystem::path& path, int level) 
         throw std::runtime_error("Brotli decompression failed");
     }
     
-    auto decompression_duration = std::chrono::duration<double>(Clock::now() - start).count();
+    auto decompression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     double decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
@@ -458,13 +455,13 @@ int main(int argc, char* argv[]) {
         throw std::runtime_error(error_message);
     }
     
-    fs::path dir(argv[1]);
-    if (!fs::exists(dir) || !fs::is_directory(dir)) {
+    std::filesystem::path dir(argv[1]);
+    if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) {
         std::string error_message = std::string("Error: ") + argv[1] + std::string(" is not a valid directory.\n");
         throw std::runtime_error(error_message);
     }
     
-    for (const auto& entry : fs::directory_iterator(dir)) {
+    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
         if (!entry.is_regular_file()) continue;
         
         const std::filesystem::path path = entry.path();
