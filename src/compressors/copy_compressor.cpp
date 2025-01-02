@@ -2,15 +2,12 @@
 #include <cstring>
 
 CopyCompressor::CopyCompressor(size_t data_size, size_t n_elements) {
-    compressed_data.reserve(data_size);
-    offsets.reserve(n_elements);
+    compressed_data.resize(data_size);
+    offsets.resize(n_elements);
 }
 
 void CopyCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
     size_t data_size = end_positions.size() == 0 ? 0 : end_positions.back();
-
-    compressed_data.resize(data_size);
-    offsets.resize(end_positions.size());
 
     // Copy raw data into the allocated memory
     std::memcpy(compressed_data.data(), data, data_size);

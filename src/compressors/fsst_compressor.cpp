@@ -2,11 +2,9 @@
 #include <cstring>
 #include <limits>
 
-#include <iostream>
-
 FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements) {
-    compressed_data.reserve(data_size);
-    offsets.reserve(n_elements);
+    compressed_data.resize(data_size);
+    offsets.resize(n_elements);
 }
 
 void FSSTCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
@@ -28,25 +26,19 @@ void FSSTCompressor::compress(const uint8_t* data, const std::vector<size_t>& en
     // Initialize encoder
     auto encoder = fsst_create(num_strings, row_lengths.data(), row_ptrs.data(), false);
 
-    // Preallocate the compression buffer with a size large enough for the worst case
-    size_t data_size = end_positions.size() == 0 ? 0 : end_positions.back();
-    std::vector<uint8_t> compression_buffer(16 + 2 * data_size);
-
     // Perform compression
     fsst_compress(encoder, num_strings, row_lengths.data(), row_ptrs.data(),
-                    compression_buffer.size(), compression_buffer.data(),
+                    compressed_data.size(), compressed_data.data(),
                     compressed_row_lengths.data(), compressed_row_ptrs.data());
 
     // Calculate the compressed data size
-    size_t compressed_length = compressed_row_ptrs[num_strings - 1] + compressed_row_lengths[num_strings - 1] - compression_buffer.data();
+    size_t compressed_length = compressed_row_ptrs[num_strings - 1] + compressed_row_lengths[num_strings - 1] - compressed_data.data();
     compressed_data.resize(compressed_length);
-    memcpy(compressed_data.data(), compression_buffer.data(), compressed_length);
 
     // Calculate offsets for random access
-    offsets.resize(num_strings);
-    compressed_row_ptrs[num_strings] = compression_buffer.data() + compressed_length;
+    compressed_row_ptrs[num_strings] = compressed_data.data() + compressed_length;
     for (unsigned i = 0; i < num_strings; ++i) {
-        offsets[i] = compressed_row_ptrs[i + 1] - compression_buffer.data();
+        offsets[i] = compressed_row_ptrs[i + 1] - compressed_data.data();
     }
 
     // Export the dictionary and destroy the encoder
@@ -77,7 +69,7 @@ size_t FSSTCompressor::decompress(uint8_t* buffer) const {
 size_t FSSTCompressor::get_item_at(size_t index, uint8_t* buffer) const {
     size_t start = (index == 0) ? 0 : offsets[index - 1];
     size_t end = offsets[index];
-    size_t max_decompressed_size = offsets.size() == 0 ? 0 : offsets.back();
+    size_t max_decompressed_size = offsets.back();
 
     size_t decompressed_length = fsst_decompress(
         &decoder,

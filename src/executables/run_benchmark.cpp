@@ -4,7 +4,6 @@
 #include <vector>
 #include <string>
 #include <cstdlib>
-#include <map>
 #include <simdjson.h>
 #include "dataset_loader.h"
 
@@ -37,7 +36,7 @@ std::vector<BenchmarkResult> read_results(const std::string& file_path) {
                 results.push_back(br);
             }
         } catch (const simdjson::simdjson_error& e) {
-            std::cerr << "Error parsing results file '" << file_path << "': " << e.what() << std::endl;
+            throw std::runtime_error("Error parsing results file '" + file_path + ": " + e.what());
         }
     }
     return results;
@@ -45,15 +44,13 @@ std::vector<BenchmarkResult> read_results(const std::string& file_path) {
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Error: Missing directory argument. Usage: " << argv[0] << " <directory>\n";
-        return 1;
+        throw std::runtime_error("Error: Missing directory argument. Usage: " + std::string(argv[0]) + ": " + " <directory>\n");
     }
 
     fs::path directory(argv[1]);
 
     if (!fs::exists(directory) || !fs::is_directory(directory)) {
-        std::cerr << "Error: " << directory << " is not a valid directory.\n";
-        return 1;
+        throw std::runtime_error("Error: " + directory.string() + " is not a valid directory.\n");
     }
 
     if (fs::exists(OUTPUT_FILE)) {
@@ -69,7 +66,7 @@ int main(int argc, char* argv[]) {
                 for (size_t i = 0; i < N_ITERATIONS; ++i) {
                     int status = std::system((BENCHMARK_PATH + " " + dataset_path + " " + compressor + " " + OUTPUT_FILE).c_str());
                     if (status != 0) {
-                        std::cerr << "Benchmark failed for dataset '" << dataset_path << "' with compressor '" << compressor << "'.\n";
+                        throw std::runtime_error("Benchmark failed for dataset '" + dataset_path + "' with compressor '" + compressor + "'.\n");
                     }
                 }
             }

@@ -454,14 +454,14 @@ CompressionResult compress_brotli(const std::filesystem::path& path, int level) 
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cerr << "Error: Missing directory argument. Usage: " << argv[0] << " <directory>\n";
-        return 1;
+        std::string error_message = std::string("Error: Missing directory argument. Usage: ") + argv[0] + std::string(" <directory>\n");
+        throw std::runtime_error(error_message);
     }
     
     fs::path dir(argv[1]);
     if (!fs::exists(dir) || !fs::is_directory(dir)) {
-        std::cerr << "Error: " << argv[1] << " is not a valid directory.\n";
-        return 1;
+        std::string error_message = std::string("Error: ") + argv[1] + std::string(" is not a valid directory.\n");
+        throw std::runtime_error(error_message);
     }
     
     for (const auto& entry : fs::directory_iterator(dir)) {
@@ -535,8 +535,7 @@ int main(int argc, char* argv[]) {
             }
 
         } catch (const std::exception& e) {
-            std::cerr << "Error processing " << entry.path() << ": " << e.what() << "\n";
-            continue;
+            throw std::runtime_error("Error processing " + entry.path().string() + ": " + e.what());
         }
     }
     

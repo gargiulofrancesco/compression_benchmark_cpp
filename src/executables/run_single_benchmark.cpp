@@ -1,7 +1,5 @@
-#include <cstdint>
 #include <iostream>
 #include <fstream>
-#include <vector>
 #include <string>
 #include <filesystem>
 #include <chrono>
@@ -18,11 +16,78 @@
 #include "zstd_compressor.h"
 #include "onpair16_compressor.h"
 #include "dataset_loader.h"
-#include "memory_buffer.h"
 
 using namespace std;
 using namespace std::chrono;
 using namespace simdjson;
+
+template <typename CompressorType>
+BenchmarkResult benchmark(CompressorType& compressor,
+                          const std::string& dataset_name,
+                          const std::vector<uint8_t>& data,
+                          const std::vector<size_t>& end_positions,
+                          const std::vector<size_t>& queries) {
+    std::vector<uint8_t> buffer(data.size() + 1024);
+
+    // Calculate the total size of random access data
+    const double data_bytes = static_cast<double>(data.size());
+    size_t random_access_bytes = 0;
+    for (size_t i : queries) {
+        size_t prev = (i == 0) ? 0 : end_positions[i - 1];
+        random_access_bytes += end_positions[i] - prev;
+    }
+
+    // Initialize benchmark result
+    BenchmarkResult result;
+    result.dataset_name = dataset_name;
+    result.compressor_name = compressor.name();
+
+    // Compression
+    auto start_compression = high_resolution_clock::now();
+    compressor.compress(data.data(), end_positions);
+    auto end_compression = high_resolution_clock::now();
+
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    double compression_time = duration_cast<duration<double>>(end_compression - start_compression).count();
+    result.compression_rate = data_bytes / static_cast<double>(compressor.space_used_bytes());
+    result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
+
+    // Decompression
+    auto start_decompression = high_resolution_clock::now();
+    size_t b_size = compressor.decompress(buffer.data());
+    auto end_decompression = high_resolution_clock::now();
+    
+    std::atomic_thread_fence(std::memory_order_seq_cst);
+    if (!std::equal(data.data(), data.data() + data.size(), buffer.data())) {
+        throw std::runtime_error("Data mismatch during decompression for compressor: " + std::string(compressor.name()));
+    }
+    double decompression_time = duration_cast<duration<double>>(end_decompression - start_decompression).count();
+    result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
+
+    // Random Access
+    double total_random_access_time = 0.0;
+    for (size_t query : queries) {
+        size_t start_position = (query == 0) ? 0 : end_positions[query - 1];
+        size_t end_position = end_positions[query];
+        size_t item_size = end_position - start_position;
+        
+        auto start_random_access = high_resolution_clock::now();
+        size_t b_size = compressor.get_item_at(query, buffer.data());
+        auto end_random_access = high_resolution_clock::now();
+        
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        if (!std::equal(data.data() + start_position, data.data() + end_position, buffer.data())) {
+            throw std::runtime_error("Data mismatch during random access for compressor: " + std::string(compressor.name()));
+        }
+        double random_access_time = duration_cast<duration<double>>(end_random_access - start_random_access).count();
+        total_random_access_time += random_access_time;
+    }
+
+    result.random_access_speed = (static_cast<double>(random_access_bytes) / (1024.0 * 1024.0)) / total_random_access_time;
+    result.average_random_access_time = total_random_access_time / queries.size();
+
+    return result;
+}
 
 void append_result_to_file(const BenchmarkResult& result, const std::filesystem::path& output_file) {
     std::vector<BenchmarkResult> results;
@@ -46,7 +111,7 @@ void append_result_to_file(const BenchmarkResult& result, const std::filesystem:
                 br.average_random_access_time = res["average_random_access_time"].get_double().value();
                 results.push_back(br);
             }
-        } catch (const simdjson::simdjson_error& e) {
+        } catch (const simdjson_error& e) {
             std::cerr << "Warning: Could not parse existing results: " << e.what() << std::endl;
         }
     }
@@ -75,78 +140,6 @@ void append_result_to_file(const BenchmarkResult& result, const std::filesystem:
     }
     output << "]\n";
     output.close();
-}
-
-template <typename CompressorType>
-BenchmarkResult benchmark(CompressorType& compressor,
-                          const std::string& dataset_name,
-                          const std::vector<uint8_t>& data,
-                          const std::vector<size_t>& end_positions,
-                          const std::vector<size_t>& queries) {
-    MemoryBuffer<uint8_t> buffer(data.size() + 1024);
-
-    // Calculate the size of data to access directly
-    const double data_bytes = static_cast<double>(data.size());
-    size_t random_access_bytes = 0;
-    for (size_t i : queries) {
-        size_t prev = (i == 0) ? 0 : end_positions[i - 1];
-        random_access_bytes += end_positions[i] - prev;
-    }
-
-    // Initialize benchmark results
-    BenchmarkResult result;
-    result.dataset_name = dataset_name;
-    result.compressor_name = compressor.name();
-
-    // Compression
-    auto start_compression = high_resolution_clock::now();
-    {
-        compressor.compress(data.data(), end_positions);
-    }
-    auto end_compression = high_resolution_clock::now();
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-
-    double compression_time = duration_cast<duration<double>>(end_compression - start_compression).count();
-    result.compression_rate = data_bytes / static_cast<double>(compressor.space_used_bytes());
-    result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
-
-    // Decompression
-    auto start_decompression = high_resolution_clock::now();
-    {
-        size_t b_size = compressor.decompress(buffer.data());
-        buffer.set_size(b_size);
-    }
-    auto end_decompression = high_resolution_clock::now();
-    std::atomic_thread_fence(std::memory_order_seq_cst);
-    assert(std::equal(buffer.data(), buffer.data() + buffer.size(), data.data()));
-
-    double decompression_time = duration_cast<duration<double>>(end_decompression - start_decompression).count();
-    result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
-
-    // Random Access
-    double total_random_access_time = 0.0;
-    for (size_t query : queries) {
-        size_t start_position = (query == 0) ? 0 : end_positions[query - 1];
-        size_t item_size = end_positions[query] - start_position;
-        buffer.clear();
-        
-        auto start_random_access = high_resolution_clock::now();
-        {
-            size_t b_size = compressor.get_item_at(query, buffer.data());
-            buffer.set_size(b_size);
-        }
-        auto end_random_access = high_resolution_clock::now();
-        std::atomic_thread_fence(std::memory_order_seq_cst);
-        assert(std::equal(buffer.data(), buffer.data() + buffer.size(), data.data() + start_position));
-
-        double random_access_time = duration_cast<duration<double>>(end_random_access - start_random_access).count();
-        total_random_access_time += random_access_time;
-    }
-
-    result.random_access_speed = (static_cast<double>(random_access_bytes) / (1024.0 * 1024.0)) / total_random_access_time;
-    result.average_random_access_time = total_random_access_time / queries.size();
-
-    return result;
 }
 
 int main(int argc, char* argv[]) {
