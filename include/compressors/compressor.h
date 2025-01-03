@@ -23,7 +23,7 @@ public:
     }
 
     // Returns the number of bytes written in buffer
-    size_t get_item_at(size_t index, uint8_t* buffer) const {
+    inline size_t get_item_at(size_t index, uint8_t* buffer) const {
         return static_cast<const Derived*>(this)->get_item_at(index, buffer);
     }
 

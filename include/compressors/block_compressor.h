@@ -34,11 +34,11 @@ public:
         block_cache_.resize(block_size_);
     }
 
-    size_t compress_block(const uint8_t* block, size_t block_size) {
+    inline size_t compress_block(const uint8_t* block, size_t block_size) {
         return static_cast<Derived*>(this)->compress_block(block, block_size);
     }
 
-    void decompress_block(const uint8_t* compressed_data, size_t compressed_size, uint8_t* buffer, size_t uncompressed_size) const {
+    inline void decompress_block(const uint8_t* compressed_data, size_t compressed_size, uint8_t* buffer, size_t uncompressed_size) const {
         static_cast<const Derived*>(this)->decompress_block(compressed_data, compressed_size, buffer, uncompressed_size);
     }
 
@@ -107,7 +107,7 @@ public:
         return total_size;
     }
 
-    size_t get_item_at(size_t index, uint8_t* buffer) const {
+    inline size_t get_item_at(size_t index, uint8_t* buffer) const {
         size_t block_index = get_block_index(index);
         decompress_block_to_cache(block_index);
 

@@ -42,7 +42,6 @@ BenchmarkResult benchmark(CompressorType& compressor,
     compressor.compress(data.data(), end_positions);
     auto end_compression = std::chrono::high_resolution_clock::now();
 
-    std::atomic_thread_fence(std::memory_order_seq_cst);
     double compression_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_compression - start_compression).count();
     result.compression_rate = data_bytes / static_cast<double>(compressor.space_used_bytes());
     result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
@@ -52,7 +51,6 @@ BenchmarkResult benchmark(CompressorType& compressor,
     size_t b_size = compressor.decompress(buffer.data());
     auto end_decompression = std::chrono::high_resolution_clock::now();
     
-    std::atomic_thread_fence(std::memory_order_seq_cst);
     if (!std::equal(data.data(), data.data() + data.size(), buffer.data())) {
         throw std::runtime_error("Data mismatch during decompression for compressor: " + std::string(compressor.name()));
     }
@@ -70,7 +68,6 @@ BenchmarkResult benchmark(CompressorType& compressor,
         size_t b_size = compressor.get_item_at(query, buffer.data());
         auto end_random_access = std::chrono::high_resolution_clock::now();
         
-        std::atomic_thread_fence(std::memory_order_seq_cst);
         if (!std::equal(data.data() + start_position, data.data() + end_position, buffer.data())) {
             throw std::runtime_error("Data mismatch during random access for compressor: " + std::string(compressor.name()));
         }
