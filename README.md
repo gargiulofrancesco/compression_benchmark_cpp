@@ -42,5 +42,5 @@ cmake --build . --config Release
 
 5. **Run the benchmark executable:**
 ```bash
-./run_benchmark /path/to/datasets_directory
+./benchmark_all /path/to/datasets_directory
 ```
