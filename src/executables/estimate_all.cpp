@@ -19,7 +19,7 @@ const std::vector<Compressor> COMPRESSORS = {
     {"snappy", {0}},
     {"xz", {1, 3}},
 };
-const std::string BENCHMARK_PATH = "./estimate_compressibility_individual";
+const std::string BENCHMARK_PATH = "./estimate_individual";
 const std::string OUTPUT_FILE = "compressibility_estimate_results.json";
 const size_t N_ITERATIONS = 15;
 
