@@ -6,12 +6,12 @@
 #include <cstdlib>
 #include "benchmark_utils.h"
 
-struct Compressor {
+struct Compression {
     std::string name;
-    std::vector<int> compression_levels;
+    std::vector<int> levels;
 };
 
-const std::vector<Compressor> COMPRESSORS = {
+const std::vector<Compression> COMPRESSIONS = {
     {"deflate", {1, 6, 9}},
     {"brotli", {1, 3, 6}},
     {"zstd", {1, 3, 6, 9, 12}},
@@ -43,12 +43,12 @@ int main(int argc, char* argv[]) {
             std::string dataset_path = entry.path().string();
             std::cout << "Processing dataset \"" << dataset_path << "\"\n";
 
-            for (const auto& compressor: COMPRESSORS) {
-                for(int level : compressor.compression_levels) {
+            for (const auto& compression: COMPRESSIONS) {
+                for(int level : compression.levels) {
                     for (size_t i = 0; i < N_ITERATIONS; ++i) {
-                        int status = std::system((BENCHMARK_PATH + " " + dataset_path + " " + compressor.name + " " + std::to_string(level) + " " + OUTPUT_FILE).c_str());
+                        int status = std::system((BENCHMARK_PATH + " " + dataset_path + " " + compression.name + " " + std::to_string(level) + " " + OUTPUT_FILE).c_str());
                         if (status != 0) {
-                            throw std::runtime_error("Benchmark failed for dataset '" + dataset_path + "' with compressor '" + compressor.name + "'.\n");
+                            throw std::runtime_error("Benchmark failed for dataset '" + dataset_path + "' with compressor '" + compression.name + "'.\n");
                         }
                     }
                 }
