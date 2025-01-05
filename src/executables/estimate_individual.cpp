@@ -22,12 +22,12 @@ BenchmarkResult compress_deflate(const std::string& dataset_name, const std::vec
 
     BenchmarkResult result;
     result.dataset_name = dataset_name;
-    result.compressor_name = "DEFLATE -" + std::to_string(compression_level);
+    result.compressor_name = "deflate -" + std::to_string(compression_level);
     result.random_access_speed = 0.0;
     result.average_random_access_time = 0.0;
 
     // Prepare compression buffer
-    std::vector<uint8_t> compressed_data(data.size() * 2);
+    std::vector<uint8_t> compressed_buffer(data.size() * 2);
     
     // Compress
     z_stream strm{};
@@ -35,8 +35,8 @@ BenchmarkResult compress_deflate(const std::string& dataset_name, const std::vec
     
     strm.next_in = const_cast<uint8_t*>(data.data());
     strm.avail_in = data.size();
-    strm.next_out = compressed_data.data();
-    strm.avail_out = compressed_data.size();
+    strm.next_out = compressed_buffer.data();
+    strm.avail_out = compressed_buffer.size();
     
     auto start = std::chrono::high_resolution_clock::now();
     if (deflate(&strm, Z_FINISH) != Z_STREAM_END) {
@@ -44,8 +44,8 @@ BenchmarkResult compress_deflate(const std::string& dataset_name, const std::vec
         throw std::runtime_error("Deflate compression failed");
     }
     
-    size_t compressed_size = compressed_data.size() - strm.avail_out;
-    compressed_data.resize(compressed_size);
+    size_t compressed_size = compressed_buffer.size() - strm.avail_out;
+    compressed_buffer.resize(compressed_size);
     deflateEnd(&strm);
     
     auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
@@ -53,13 +53,13 @@ BenchmarkResult compress_deflate(const std::string& dataset_name, const std::vec
     result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_size);
     
     // Decompress
-    std::vector<uint8_t> decompressed_data(data.size());
+    std::vector<uint8_t> decompressed_buffer(data.size());
     inflateInit(&strm);
     
-    strm.next_in = compressed_data.data();
+    strm.next_in = compressed_buffer.data();
     strm.avail_in = compressed_size;
-    strm.next_out = decompressed_data.data();
-    strm.avail_out = decompressed_data.size();
+    strm.next_out = decompressed_buffer.data();
+    strm.avail_out = decompressed_buffer.size();
     
     start = std::chrono::high_resolution_clock::now();
     if (inflate(&strm, Z_FINISH) != Z_STREAM_END) {
@@ -73,7 +73,7 @@ BenchmarkResult compress_deflate(const std::string& dataset_name, const std::vec
     result.decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
-    assert(data == decompressed_data);
+    assert(data == decompressed_buffer);
     
     return result;
 }
@@ -83,13 +83,13 @@ BenchmarkResult compress_brotli(const std::string& dataset_name, const std::vect
 
     BenchmarkResult result;
     result.dataset_name = dataset_name;
-    result.compressor_name = "Brotli -" + std::to_string(compression_level);
+    result.compressor_name = "brotli -" + std::to_string(compression_level);
     result.random_access_speed = 0.0;
     result.average_random_access_time = 0.0;
        
     // Prepare compression buffer
     size_t compressed_size_bound = BrotliEncoderMaxCompressedSize(data.size());
-    std::vector<uint8_t> compressed_data(compressed_size_bound);
+    std::vector<uint8_t> compressed_buffer(compressed_size_bound);
     size_t encoded_size = compressed_size_bound;
     
     // Compress
@@ -102,27 +102,27 @@ BenchmarkResult compress_brotli(const std::string& dataset_name, const std::vect
             data.size(),
             data.data(),
             &encoded_size,
-            compressed_data.data())) {
+            compressed_buffer.data())) {
         throw std::runtime_error("Brotli compression failed");
     }
     
-    compressed_data.resize(encoded_size);
+    compressed_buffer.resize(encoded_size);
     
     auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     result.compression_speed = data_size_mb / compression_duration;
-    result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_data.size());
+    result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_buffer.size());
     
     // Decompress
-    std::vector<uint8_t> decompressed_data(data.size());
+    std::vector<uint8_t> decompressed_buffer(data.size());
     size_t decoded_size = data.size();
     
     start = std::chrono::high_resolution_clock::now();
     
     if (!BrotliDecoderDecompress(
             encoded_size,
-            compressed_data.data(),
+            compressed_buffer.data(),
             &decoded_size,
-            decompressed_data.data())) {
+            decompressed_buffer.data())) {
         throw std::runtime_error("Brotli decompression failed");
     }
     
@@ -130,7 +130,7 @@ BenchmarkResult compress_brotli(const std::string& dataset_name, const std::vect
     result.decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
-    assert(data == decompressed_data);
+    assert(data == decompressed_buffer);
     
     return result;
 }
@@ -140,18 +140,18 @@ BenchmarkResult compress_zstd(const std::string& dataset_name, const std::vector
 
     BenchmarkResult result;
     result.dataset_name = dataset_name;
-    result.compressor_name = "Zstd -" + std::to_string(compression_level);
+    result.compressor_name = "zstd -" + std::to_string(compression_level);
     result.random_access_speed = 0.0;
     result.average_random_access_time = 0.0;
 
     // Prepare compression buffer
     size_t max_dst_size = ZSTD_compressBound(data.size());
-    std::vector<uint8_t> compressed_data(max_dst_size);
+    std::vector<uint8_t> compressed_buffer(max_dst_size);
     
     // Compress
     auto start = std::chrono::high_resolution_clock::now();
     size_t compressed_size = ZSTD_compress(
-        compressed_data.data(), compressed_data.size(),
+        compressed_buffer.data(), compressed_buffer.size(),
         data.data(), data.size(),
         compression_level
     );
@@ -159,19 +159,19 @@ BenchmarkResult compress_zstd(const std::string& dataset_name, const std::vector
     if (ZSTD_isError(compressed_size)) {
         throw std::runtime_error("Zstd compression failed: " + std::string(ZSTD_getErrorName(compressed_size)));
     }
-    compressed_data.resize(compressed_size);
+    compressed_buffer.resize(compressed_size);
     
     auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     result.compression_speed = data_size_mb / compression_duration;
     result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_size);
 
     // Decompress
-    std::vector<uint8_t> decompressed_data(data.size());
+    std::vector<uint8_t> decompressed_buffer(data.size());
     start = std::chrono::high_resolution_clock::now();
     
     size_t decompressed_size = ZSTD_decompress(
-        decompressed_data.data(), decompressed_data.size(),
-        compressed_data.data(), compressed_size
+        decompressed_buffer.data(), decompressed_buffer.size(),
+        compressed_buffer.data(), compressed_size
     );
     
     if (ZSTD_isError(decompressed_size)) {
@@ -182,7 +182,7 @@ BenchmarkResult compress_zstd(const std::string& dataset_name, const std::vector
     result.decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
-    assert(data == decompressed_data);
+    assert(data == decompressed_buffer);
     
     return result;
 }
@@ -192,13 +192,13 @@ BenchmarkResult compress_lz4(const std::string& dataset_name, const std::vector<
 
     BenchmarkResult result;
     result.dataset_name = dataset_name;
-    result.compressor_name = "LZ4 -" + std::to_string(compression_level);
+    result.compressor_name = "lz4 -" + std::to_string(compression_level);
     result.random_access_speed = 0.0;
     result.average_random_access_time = 0.0;
     
     // Prepare compression buffer
     size_t max_dst_size = LZ4_compressBound(data.size());
-    std::vector<uint8_t> compressed_data(max_dst_size);
+    std::vector<uint8_t> compressed_buffer(max_dst_size);
     
     // Compress
     auto start = std::chrono::high_resolution_clock::now();
@@ -207,17 +207,17 @@ BenchmarkResult compress_lz4(const std::string& dataset_name, const std::vector<
         // Use default LZ4 compression
         compressed_size = LZ4_compress_default(
             reinterpret_cast<const char*>(data.data()),
-            reinterpret_cast<char*>(compressed_data.data()),
+            reinterpret_cast<char*>(compressed_buffer.data()),
             data.size(),
-            compressed_data.size()
+            compressed_buffer.size()
         );
     } else {
         // Use LZ4-HC compression for higher levels
         compressed_size = LZ4_compress_HC (
             reinterpret_cast<const char*>(data.data()),
-            reinterpret_cast<char*>(compressed_data.data()),
+            reinterpret_cast<char*>(compressed_buffer.data()),
             data.size(),
-            compressed_data.size(),
+            compressed_buffer.size(),
             compression_level
         );
     }
@@ -225,19 +225,19 @@ BenchmarkResult compress_lz4(const std::string& dataset_name, const std::vector<
     if (compressed_size <= 0) {
         throw std::runtime_error("LZ4 compression failed");
     }
-    compressed_data.resize(compressed_size);
+    compressed_buffer.resize(compressed_size);
     
     auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     result.compression_speed = data_size_mb / compression_duration;
     result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_size);
     
     // Decompress
-    std::vector<uint8_t> decompressed_data(data.size());
+    std::vector<uint8_t> decompressed_buffer(data.size());
     start = std::chrono::high_resolution_clock::now();
     
     int decompressed_size = LZ4_decompress_safe(
-        reinterpret_cast<const char*>(compressed_data.data()),
-        reinterpret_cast<char*>(decompressed_data.data()),
+        reinterpret_cast<const char*>(compressed_buffer.data()),
+        reinterpret_cast<char*>(decompressed_buffer.data()),
         compressed_size,
         data.size()
     );
@@ -250,7 +250,7 @@ BenchmarkResult compress_lz4(const std::string& dataset_name, const std::vector<
     result.decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
-    assert(data == decompressed_data);
+    assert(data == decompressed_buffer);
     
     return result;
 }
@@ -260,13 +260,13 @@ BenchmarkResult compress_snappy(const std::string& dataset_name, const std::vect
 
     BenchmarkResult result;
     result.dataset_name = dataset_name;
-    result.compressor_name = "Snappy";
+    result.compressor_name = "snappy";
     result.random_access_speed = 0.0;
     result.average_random_access_time = 0.0;
     
      // Prepare compression buffer
     size_t compressed_size_bound = snappy::MaxCompressedLength(data.size());
-    std::vector<uint8_t> compressed_data(compressed_size_bound);
+    std::vector<uint8_t> compressed_buffer(compressed_size_bound);
     size_t compressed_size;
     
     // Compress
@@ -275,26 +275,26 @@ BenchmarkResult compress_snappy(const std::string& dataset_name, const std::vect
     snappy::RawCompress(
         reinterpret_cast<const char*>(data.data()),
         data.size(),
-        reinterpret_cast<char*>(compressed_data.data()),
+        reinterpret_cast<char*>(compressed_buffer.data()),
         &compressed_size
     );
     
-    compressed_data.resize(compressed_size);
+    compressed_buffer.resize(compressed_size);
     
     auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     result.compression_speed = data_size_mb / compression_duration;
     result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_size);
     
     // Decompress
-    std::vector<uint8_t> decompressed_data(data.size());
+    std::vector<uint8_t> decompressed_buffer(data.size());
     size_t decompressed_size;
     
     start = std::chrono::high_resolution_clock::now();
     
     if (!snappy::RawUncompress(
-            reinterpret_cast<const char*>(compressed_data.data()),
+            reinterpret_cast<const char*>(compressed_buffer.data()),
             compressed_size,
-            reinterpret_cast<char*>(decompressed_data.data()))) {
+            reinterpret_cast<char*>(decompressed_buffer.data()))) {
         throw std::runtime_error("Snappy decompression failed");
     }
     
@@ -302,7 +302,7 @@ BenchmarkResult compress_snappy(const std::string& dataset_name, const std::vect
     result.decompression_speed = data_size_mb / decompression_duration;
     
     // Verify
-    assert(data == decompressed_data);
+    assert(data == decompressed_buffer);
     
     return result;
 }
@@ -324,13 +324,13 @@ BenchmarkResult compress_xz(const std::string& dataset_name, const std::vector<u
     }
     
     // Prepare compression buffer
-    std::vector<uint8_t> compressed_data(data.size() * 2); // Initial size estimate
+    std::vector<uint8_t> compressed_buffer(data.size() * 2); // Initial size estimate
     
     // Compress
     strm.next_in = data.data();
     strm.avail_in = data.size();
-    strm.next_out = compressed_data.data();
-    strm.avail_out = compressed_data.size();
+    strm.next_out = compressed_buffer.data();
+    strm.avail_out = compressed_buffer.size();
     
     auto start = std::chrono::high_resolution_clock::now();
     
@@ -348,22 +348,22 @@ BenchmarkResult compress_xz(const std::string& dataset_name, const std::vector<u
         
         // If we need more space
         if (strm.avail_out == 0) {
-            size_t old_size = compressed_data.size();
-            compressed_data.resize(old_size * 2);
-            strm.next_out = compressed_data.data() + old_size;
+            size_t old_size = compressed_buffer.size();
+            compressed_buffer.resize(old_size * 2);
+            strm.next_out = compressed_buffer.data() + old_size;
             strm.avail_out = old_size;
         }
     }
     
-    compressed_data.resize(strm.total_out);
+    compressed_buffer.resize(strm.total_out);
     auto compression_duration = std::chrono::duration<double>(std::chrono::high_resolution_clock::now() - start).count();
     result.compression_speed = data_size_mb / compression_duration;
-    result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_data.size());
+    result.compression_rate = static_cast<double>(data.size()) / static_cast<double>(compressed_buffer.size());
     
     lzma_end(&strm);
     
     // Decompress
-    std::vector<uint8_t> decompressed_data(data.size());
+    std::vector<uint8_t> decompressed_buffer(data.size());
     strm = LZMA_STREAM_INIT;
     
     ret = lzma_stream_decoder(&strm, UINT64_MAX, LZMA_CONCATENATED);
@@ -371,10 +371,10 @@ BenchmarkResult compress_xz(const std::string& dataset_name, const std::vector<u
         throw std::runtime_error("Failed to initialize LZMA decoder");
     }
     
-    strm.next_in = compressed_data.data();
-    strm.avail_in = compressed_data.size();
-    strm.next_out = decompressed_data.data();
-    strm.avail_out = decompressed_data.size();
+    strm.next_in = compressed_buffer.data();
+    strm.avail_in = compressed_buffer.size();
+    strm.next_out = decompressed_buffer.data();
+    strm.avail_out = decompressed_buffer.size();
     
     start = std::chrono::high_resolution_clock::now();
     
@@ -390,7 +390,7 @@ BenchmarkResult compress_xz(const std::string& dataset_name, const std::vector<u
     lzma_end(&strm);
     
     // Verify
-    assert(data == decompressed_data);
+    assert(data == decompressed_buffer);
     
     return result;
 }

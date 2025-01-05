@@ -12,12 +12,12 @@ struct Compression {
 };
 
 const std::vector<Compression> COMPRESSIONS = {
-    {"deflate", {1, 6, 9}},
-    {"brotli", {1, 3, 6}},
-    {"zstd", {1, 3, 6, 9, 12}},
-    {"lz4", {0, 1, 3, 6, 9, 12}},
+    {"deflate", {3, 6}},
+    {"brotli", {3, 6}},
+    {"zstd", {3, 6}},
+    {"lz4", {0, 3, 6}},
     {"snappy", {0}},
-    {"xz", {1, 3}},
+    {"xz", {1}},
 };
 const std::string BENCHMARK_PATH = "./estimate_individual";
 const std::string OUTPUT_FILE = "compressibility_estimate_results.json";
