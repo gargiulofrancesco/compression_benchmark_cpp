@@ -17,6 +17,8 @@
 #include <zlib.h>
 #include <lzma.h>
 
+const int DEFAULT_CORE_ID = 0;
+
 BenchmarkResult compress_deflate(const std::string& dataset_name, const std::vector<uint8_t>& data, const int compression_level) {
     const double data_size_mb = data.size() / (1024.0 * 1024.0);
 
@@ -397,7 +399,7 @@ BenchmarkResult compress_xz(const std::string& dataset_name, const std::vector<u
 
 int main(int argc, char* argv[]) {
     if (argc < 5) {
-        std::cerr << "Usage: " << argv[0] << " <dataset_path> <compressor_name> <compression_level> <output_file>\n";
+        std::cerr << "Usage: " << argv[0] << " <dataset_path> <compressor_name> <compression_level> <output_file> [core_id]\n";
         return 1;
     }
 
@@ -405,6 +407,7 @@ int main(int argc, char* argv[]) {
     std::string compressor_name(argv[2]);
     int compression_level = std::stoi(argv[3]);
     std::filesystem::path output_file(argv[4]);
+    int core_id = (argc > 5) ? std::stoi(argv[5]) : DEFAULT_CORE_ID;
 
     // Validate dataset path
     if (!std::filesystem::exists(dataset_path)) {
@@ -415,6 +418,9 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Dataset path '" << dataset_path << "' is not a file.\n";
         return 1;
     }
+
+    // Set CPU affinity
+    set_affinity(core_id);
 
     try {
         // Load dataset

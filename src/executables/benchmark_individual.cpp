@@ -16,6 +16,8 @@
 #include "onpair16_compressor.h"
 #include "benchmark_utils.h"
 
+const int DEFAULT_CORE_ID = 0;
+
 template <typename CompressorType>
 BenchmarkResult benchmark(CompressorType& compressor,
                           const std::string& dataset_name,
@@ -83,13 +85,14 @@ BenchmarkResult benchmark(CompressorType& compressor,
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        std::cerr << "Usage: " << argv[0] << " <dataset_path> <compressor_name> <output_file>\n";
+        std::cerr << "Usage: " << argv[0] << " <dataset_path> <compressor_name> <output_file> [core_id]\n";
         return 1;
     }
 
     std::filesystem::path dataset_path(argv[1]);
     std::string compressor_name(argv[2]);
     std::filesystem::path output_file(argv[3]);
+    int core_id = (argc > 4) ? std::stoi(argv[4]) : DEFAULT_CORE_ID;
 
     // Validate dataset path
     if (!std::filesystem::exists(dataset_path)) {
@@ -100,6 +103,9 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error: Dataset path '" << dataset_path << "' is not a file.\n";
         return 1;
     }
+
+    // Set CPU affinity
+    set_affinity(core_id);
 
     try {
         // Load dataset

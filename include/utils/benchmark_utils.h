@@ -26,5 +26,6 @@ std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>, std::vector<s
 std::vector<BenchmarkResult> read_benchmark_results(const std::filesystem::path& file_path);
 void append_benchmark_result(const BenchmarkResult& result, const std::filesystem::path& output_file);
 void print_benchmark_results(const std::vector<BenchmarkResult>& results);
+void set_affinity(int core_id);
 
 #endif // BENCHMARK_UTILS_H

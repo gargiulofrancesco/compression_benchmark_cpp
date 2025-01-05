@@ -109,7 +109,8 @@ void append_benchmark_result(const BenchmarkResult& result, const std::filesyste
                 results.push_back(br);
             }
         } catch (const simdjson::simdjson_error& e) {
-            std::cerr << "Warning: Could not parse existing results: " << e.what() << std::endl;
+            auto msg = std::string("Error parsing results file: ") + e.what();
+            throw std::runtime_error(msg);
         }
     }
 
@@ -229,5 +230,14 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
                   << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.decompression_speed
                   << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.random_access_speed
                   << std::setw(20) << std::fixed << std::setprecision(0) << (avg_result.average_random_access_time * 1e9) << "\n";
+    }
+}
+
+void set_affinity(int core_id) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) != 0) {
+        throw std::system_error(errno, std::generic_category(), "sched_setaffinity failed");
     }
 }
