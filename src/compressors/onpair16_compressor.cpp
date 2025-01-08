@@ -32,33 +32,6 @@ size_t OnPair16Compressor::decompress(uint8_t* buffer) const {
     return size;
 }
 
-/* Alternative decompress functions
-
-// Variant 1: Copying two u64
-size_t OnPair16Compressor::decompress(uint8_t* buffer) const {
-    const uint8_t* dict_ptr = dictionary_data.data();
-    const uint32_t* offsets_ptr = dictionary_offsets.data();
-    size_t size = 0;
-
-    for (uint16_t token_id : compressed_data) {
-        size_t dict_start = offsets_ptr[token_id];
-        size_t dict_end = offsets_ptr[token_id + 1];
-        size_t length = dict_end - dict_start;
-
-        // Copy two 64-bit chunks (8 bytes each)
-        const uint64_t* dict_u64 = reinterpret_cast<const uint64_t*>(dict_ptr + dict_start);
-        uint64_t* buffer_u64 = reinterpret_cast<uint64_t*>(buffer + size);
-        
-        buffer_u64[0] = dict_u64[0];  // First 8 bytes
-        buffer_u64[1] = dict_u64[1];  // Next 8 bytes
-
-        size += length;
-    }
-
-    return size;
-}
-*/
-
 // Assumes buffer has enough space to store the decompressed data
 size_t OnPair16Compressor::get_item_at(size_t index, uint8_t* buffer) const {
     const uint8_t* dict_ptr = dictionary_data.data();
@@ -92,6 +65,8 @@ const char* OnPair16Compressor::name() const {
 }
 
 LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
+    dictionary_offsets.push_back(0);
+    
     robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, PairHash> frequency;
     LongestPrefixMatcher16<uint16_t> lpm;   
     uint16_t next_token_id = 256;
@@ -100,6 +75,8 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
     for(uint16_t i=0; i<=255; i++) {
         uint8_t value = static_cast<uint8_t>(i);
         lpm.insert(&value, 1, i);
+        dictionary_data.push_back(value);
+        dictionary_offsets.push_back(dictionary_data.size());
     }
 
     size_t start = 0;
@@ -130,6 +107,7 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
             auto match = lpm.find_longest_match(data + pos, end - pos);
             uint16_t match_token_id = match.value().first;
             size_t match_length = match.value().second; 
+            
             if (match_length + previous_length <= MAX_LENGTH) {
                 // Update token frequency and possibly merge tokens
                 auto token_pair = std::make_pair(previous_token_id, match_token_id);
@@ -137,6 +115,9 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
 
                 if (frequency[token_pair] > THRESHOLD) {
                     lpm.insert(data + pos - previous_length, previous_length + match_length, next_token_id);
+                    dictionary_data.insert(dictionary_data.end(), data + pos - previous_length, data + pos + match_length);
+                    dictionary_offsets.push_back(dictionary_data.size());
+                    
                     next_token_id++;
                     frequency.erase(token_pair);
                 }
@@ -154,14 +135,10 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
 }
 
 void OnPair16Compressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher16<uint16_t>& lpm) {
-    dictionary_offsets.push_back(0);
     offsets.push_back(0);
 
-    // Initialize dictionary_map as a vector of std::optional<uint16_t>
-    std::vector<uint16_t> dictionary_map(1 << 16, 0xFFFF);  // Use 0xFFFF as sentinel value
-    uint16_t next_token_id = 0;
-
     size_t start = 0;
+    
     for (size_t end : end_positions) {
         if (start == end) {
             offsets.push_back(compressed_data.size());
@@ -172,27 +149,12 @@ void OnPair16Compressor::parse(const uint8_t* data, const std::vector<size_t>& e
         while (pos < end) {
             // Find the longest match
             auto match = lpm.find_longest_match(data + pos, end - pos);
-            uint16_t match_token_id = match->first;
-            size_t match_length = match->second;
+            uint16_t token_id = match->first;
+            size_t length = match->second;
 
-            // Check if the token is already in the dictionary_map
-            uint16_t& existing_token = dictionary_map[match_token_id];
-            if (existing_token != 0xFFFF) {
-                // Token exists, use it directly
-                compressed_data.push_back(existing_token);
-            } else {
-                // Create new token
-                dictionary_map[match_token_id] = next_token_id;
-                compressed_data.push_back(next_token_id);
+            compressed_data.push_back(token_id);
 
-                 // Add the new token to the dictionary
-                dictionary_data.insert(dictionary_data.end(), data + pos, data + pos + match_length);
-                dictionary_offsets.push_back(dictionary_data.size());
-
-                next_token_id++;
-            }
-
-            pos += match_length;
+            pos += length;
         }
 
         offsets.push_back(compressed_data.size());
