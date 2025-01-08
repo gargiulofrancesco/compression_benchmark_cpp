@@ -105,8 +105,9 @@ public:
         }
         
         // Short match handling
+        uint64_t prefix = bytes_to_u64_le(data, 8);
         for (size_t len = std::min(length, size_t{8}); len > 0; --len) {
-            uint64_t prefix = bytes_to_u64_le(data, len);
+            prefix &= MASKS[len];
             auto it = dictionary.find(std::make_pair(prefix, static_cast<uint8_t>(len)));
             if (it != dictionary.end()) {
                 return std::make_pair(it->second, len);
