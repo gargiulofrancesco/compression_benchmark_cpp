@@ -48,12 +48,11 @@ std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>, std::vector<s
     const std::string& dataset_name = dataset.dataset_name;
     std::vector<uint8_t> data;
     std::vector<size_t> end_positions;
-    size_t current_position = 0;
-        
+    
+    end_positions.push_back(0);
     for (const auto& s : dataset.data) {
         data.insert(data.end(), s.begin(), s.end());
-        current_position += s.size();
-        end_positions.push_back(current_position);
+        end_positions.push_back(end_positions.back() + s.size());
     }
     
     return {dataset_name, data, end_positions, dataset.queries};

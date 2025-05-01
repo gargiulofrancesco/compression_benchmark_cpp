@@ -7,11 +7,7 @@ CopyCompressor::CopyCompressor(size_t data_size, size_t n_elements) {
 }
 
 void CopyCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    offsets[0] = 0;
-    if (!end_positions.empty()) {
-        std::memcpy(offsets.data() + 1, end_positions.data(), end_positions.size() * sizeof(size_t));
-    }
-
+    std::memcpy(offsets.data(), end_positions.data(), end_positions.size() * sizeof(size_t));
     std::memcpy(compressed_data.data(), data, end_positions.back());
 }
 

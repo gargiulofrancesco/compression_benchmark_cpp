@@ -30,8 +30,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
     const double data_bytes = static_cast<double>(data.size());
     size_t random_access_bytes = 0;
     for (size_t i : queries) {
-        size_t prev = (i == 0) ? 0 : end_positions[i - 1];
-        random_access_bytes += end_positions[i] - prev;
+        random_access_bytes += end_positions[i+1] - end_positions[i];
     }
 
     // Initialize benchmark result
@@ -62,8 +61,8 @@ BenchmarkResult benchmark(CompressorType& compressor,
     // Random Access
     double total_random_access_time = 0.0;
     for (size_t query : queries) {
-        size_t start_position = (query == 0) ? 0 : end_positions[query - 1];
-        size_t end_position = end_positions[query];
+        size_t start_position = end_positions[query];
+        size_t end_position = end_positions[query+1];
         size_t item_size = end_position - start_position;
         
         auto start_random_access = std::chrono::high_resolution_clock::now();
@@ -115,39 +114,39 @@ int main(int argc, char* argv[]) {
         // Initialize the compressor
         BenchmarkResult result;
         if (compressor_name == "copy") {
-            CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size());
+            CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "lz4") {
-            LZ4Compressor compressor = LZ4Compressor::create(data.size(), end_positions.size());
+            LZ4Compressor compressor = LZ4Compressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "snappy") {
-            SnappyCompressor compressor = SnappyCompressor::create(data.size(), end_positions.size());
+            SnappyCompressor compressor = SnappyCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "xz") {
-            XZCompressor compressor = XZCompressor::create(data.size(), end_positions.size());
+            XZCompressor compressor = XZCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "zstd") {
-            ZstdCompressor compressor = ZstdCompressor::create(data.size(), end_positions.size());
+            ZstdCompressor compressor = ZstdCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "deflate") {
-            DeflateCompressor compressor = DeflateCompressor::create(data.size(), end_positions.size());
+            DeflateCompressor compressor = DeflateCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "brotli") {
-            BrotliCompressor compressor = BrotliCompressor::create(data.size(), end_positions.size());
+            BrotliCompressor compressor = BrotliCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "fsst") {
-            FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size());
+            FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         } 
         else if (compressor_name == "onpair16") {
-            OnPair16Compressor compressor = OnPair16Compressor::create(data.size(), end_positions.size());
+            OnPair16Compressor compressor = OnPair16Compressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {

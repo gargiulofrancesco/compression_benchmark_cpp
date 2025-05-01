@@ -14,12 +14,12 @@ FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements) {
 }
 
 void FSSTCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    size_t num_strings = end_positions.size();
+    size_t num_strings = end_positions.size()-1;
     
     // Prepare row lengths and pointers based on end positions
     for (size_t i = 0; i < num_strings; ++i) {
-        size_t start = (i == 0) ? 0 : end_positions[i - 1];
-        size_t end = end_positions[i];
+        size_t start = end_positions[i];
+        size_t end = end_positions[i+1];
         row_lengths[i] = end - start;
         row_ptrs[i] = data + start;
     }

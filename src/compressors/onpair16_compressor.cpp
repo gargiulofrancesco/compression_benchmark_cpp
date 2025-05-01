@@ -79,11 +79,11 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
         dictionary_offsets.push_back(dictionary_data.size());
     }
 
-    size_t start = 0;
-    size_t pos = 0;
+    // Iterate over entries
+    for(int i=0; i<end_positions.size()-1; i++) {
+        size_t start = end_positions[i];
+        size_t end = end_positions[i+1];
 
-    // Iterate over end positions
-    for (size_t end : end_positions) {
         if (next_token_id == 65535) {
             break; 
         }
@@ -92,11 +92,11 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
             continue;
         }
 
-        auto match = lpm.find_longest_match(data + pos, end - pos);
+        auto match = lpm.find_longest_match(data + start, end - start);
         uint16_t previous_token_id = match.value().first;
         size_t previous_length = match.value().second; 
 
-        pos = start + previous_length;
+        size_t pos = start + previous_length;
 
         while (pos < end) {
             if (next_token_id == 65535) {
@@ -127,8 +127,6 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
             previous_length = match_length;
             pos += match_length;
         }
-
-        start = end;
     }
 
     return std::move(lpm);
@@ -137,9 +135,10 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
 void OnPair16Compressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher16<uint16_t>& lpm) {
     offsets.push_back(0);
 
-    size_t start = 0;
-    
-    for (size_t end : end_positions) {
+    for(int i=0; i<end_positions.size()-1; i++) {
+        size_t start = end_positions[i];
+        size_t end = end_positions[i+1];
+
         if (start == end) {
             offsets.push_back(compressed_data.size());
             continue;
@@ -158,6 +157,5 @@ void OnPair16Compressor::parse(const uint8_t* data, const std::vector<size_t>& e
         }
 
         offsets.push_back(compressed_data.size());
-        start = end;
     }
 }

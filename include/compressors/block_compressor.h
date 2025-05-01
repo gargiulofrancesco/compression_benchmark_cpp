@@ -49,7 +49,8 @@ public:
         size_t current_block_size = 0;  // Total size of the current block
         size_t item_start = 0;          // Start of the current item
 
-        for (size_t item_end : end_positions) {
+        for(int i=1; i<end_positions.size(); i++) {
+            size_t item_end = end_positions[i];
             size_t item_size = item_end - item_start;
             
             if (current_block_size + item_size > block_size_) {
@@ -141,9 +142,10 @@ private:
         size_t first_item_index = block_index == 0 ? 0 : 
             blocks_metadata_[block_index - 1].num_items_psum;
 
-        size_t start = item_index > 0 ? item_end_positions_[item_index - 1] : 0;
-        size_t adjustment = first_item_index > 0 ? item_end_positions_[first_item_index - 1] : 0;
-        size_t end = item_end_positions_[item_index];
+        size_t start = item_end_positions_[item_index];
+        size_t end = item_end_positions_[item_index+1];
+        size_t adjustment = first_item_index > 0 ? item_end_positions_[first_item_index] : 0;
+        
 
         return {start - adjustment, end - adjustment};
     }
