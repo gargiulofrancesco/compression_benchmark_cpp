@@ -6,11 +6,10 @@
 #include <cstdlib>
 #include "benchmark_utils.h"
 
-const std::vector<std::string> COMPRESSORS = {"copy", "lz4", "snappy", "zstd", "fsst", "onpair16"};
+const std::vector<std::string> COMPRESSORS = {"copy", "lz4", "snappy", "zstd", "fsst", "onpair16", "onpair"};
 const std::string BENCHMARK_PATH = "./benchmark_individual";
 const std::string OUTPUT_FILE = "benchmark_results.json";
-const size_t N_ITERATIONS = 1;
-
+const size_t N_ITERATIONS = 10;
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {

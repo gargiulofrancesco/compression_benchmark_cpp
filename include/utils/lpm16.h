@@ -9,18 +9,7 @@
 #include <bit>
 #include <functional>
 #include <robin_hood.h>
-
-struct PairHash {
-    // For pair<uint16_t, uint16_t>
-    size_t operator()(const std::pair<uint16_t, uint16_t>& p) const noexcept {
-        return robin_hood::hash<uint32_t>{}((static_cast<uint32_t>(p.first) << 16) | p.second);
-    }
-
-    // For pair<uint64_t, uint8_t>
-    size_t operator()(const std::pair<uint64_t, uint8_t>& p) const noexcept {
-        return robin_hood::hash<uint64_t>{}(p.first) ^ robin_hood::hash<uint8_t>{}(p.second);
-    }
-};
+#include "pair_hash.h"
 
 template<typename V>
 class LongestPrefixMatcher16 {

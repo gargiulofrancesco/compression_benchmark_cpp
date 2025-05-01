@@ -14,6 +14,7 @@
 #include "deflate_compressor.h"
 #include "zstd_compressor.h"
 #include "onpair16_compressor.h"
+#include "onpair_compressor.h"
 #include "benchmark_utils.h"
 
 const int DEFAULT_CORE_ID = 0;
@@ -147,6 +148,10 @@ int main(int argc, char* argv[]) {
         } 
         else if (compressor_name == "onpair16") {
             OnPair16Compressor compressor = OnPair16Compressor::create(data.size(), end_positions.size()-1);
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "onpair") {
+            OnPairCompressor compressor = OnPairCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {
