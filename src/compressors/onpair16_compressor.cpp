@@ -86,7 +86,7 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
         size_t start = end_positions[i];
         size_t end = end_positions[i+1];
 
-        if (next_token_id == 65535) {
+        if (next_token_id == MAX_TOKENS) {
             break; 
         }
 
@@ -101,7 +101,7 @@ LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, 
         size_t pos = start + previous_length;
 
         while (pos < end) {
-            if (next_token_id == 65535) {
+            if (next_token_id == MAX_TOKENS) {
                 break; 
             }
 

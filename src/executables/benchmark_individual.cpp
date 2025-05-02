@@ -15,6 +15,7 @@
 #include "zstd_compressor.h"
 #include "onpair16_compressor.h"
 #include "onpair_compressor.h"
+#include "onpair_domain_compressor.h"
 #include "deflate_individual_compressor.h"
 #include "benchmark_utils.h"
 
@@ -153,6 +154,10 @@ int main(int argc, char* argv[]) {
         }
         else if (compressor_name == "onpair") {
             OnPairCompressor compressor = OnPairCompressor::create(data.size(), end_positions.size()-1);
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "onpair_domain") {
+            OnPairDomainCompressor compressor = OnPairDomainCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "deflate_individual") {

@@ -1,24 +1,36 @@
-#include "onpair_compressor.h"
+#include "onpair_domain_compressor.h"
 #include <cstring>
 #include <robin_hood.h>
 #include <random>
 #include <queue>
 
-OnPairCompressor::OnPairCompressor(size_t data_size, size_t n_elements) {
+OnPairDomainCompressor::OnPairDomainCompressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
     offsets.reserve(n_elements);
     dictionary_data.reserve(2 * (1024 * 1024)); // 2 MB
     dictionary_offsets.reserve(1 << 16);
 }
 
-void OnPairCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, SAMPLE_SIZE);
+void OnPairDomainCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
+    auto [top_k_data, top_k_end_positions, top_k_parsing] = find_top_k(data, end_positions, K);
+    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, SAMPLE_SIZE, top_k_parsing);
     LongestPrefixMatcher lpm = train(sampled_data.data(), sampled_end_positions);
-    parse(data, end_positions, lpm);
+
+    size_t top_k_base_id = dictionary_offsets.size() - 1;
+    dictionary_data.insert(dictionary_data.end(), top_k_data.begin(), top_k_data.end());
+    size_t dictionary_offset = dictionary_offsets.back();
+    for (size_t i=1; i<top_k_end_positions.size(); i++) {
+        dictionary_offsets.push_back(dictionary_offset + top_k_end_positions[i]);
+    }
+    for(auto& [key, value] : top_k_parsing){
+        value += top_k_base_id;
+    }
+
+    parse(data, end_positions, lpm, top_k_parsing);
 }
 
 // Assumes buffer has enough space to store the decompressed data
-size_t OnPairCompressor::decompress(uint8_t* buffer) const {
+size_t OnPairDomainCompressor::decompress(uint8_t* buffer) const {
     const uint8_t* dict_ptr = dictionary_data.data();
     const uint32_t* offsets_ptr = dictionary_offsets.data();
     size_t size = 0;
@@ -40,7 +52,7 @@ size_t OnPairCompressor::decompress(uint8_t* buffer) const {
 }
 
 // Assumes buffer has enough space to store the decompressed data
-size_t OnPairCompressor::get_item_at(size_t index, uint8_t* buffer) const {
+size_t OnPairDomainCompressor::get_item_at(size_t index, uint8_t* buffer) const {
     const uint8_t* dict_ptr = dictionary_data.data();
     const uint32_t* offsets_ptr = dictionary_offsets.data();
     size_t size = 0;
@@ -67,15 +79,15 @@ size_t OnPairCompressor::get_item_at(size_t index, uint8_t* buffer) const {
     return size;
 }
 
-size_t OnPairCompressor::space_used_bytes() const {
+size_t OnPairDomainCompressor::space_used_bytes() const {
     return compressed_data.size() * sizeof(uint16_t) + dictionary_data.size() + dictionary_offsets.size() * sizeof(uint32_t);
 }
 
-const char* OnPairCompressor::name() const {
-    return "OnPair";
+const char* OnPairDomainCompressor::name() const {
+    return "OnPairDomain";
 }
 
-LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
+LongestPrefixMatcher OnPairDomainCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     dictionary_offsets.push_back(0);
     
     robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, pair_hash> frequency;
@@ -141,7 +153,7 @@ LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vec
     return std::move(lpm);
 }
 
-void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm) {
+void OnPairDomainCompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm, const std::unordered_map<size_t, uint16_t>& top_k_parsing) {
     offsets.push_back(0);
 
     for(int i=0; i<end_positions.size()-1; i++) {
@@ -149,6 +161,13 @@ void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end
         size_t end = end_positions[i+1];
 
         if (start == end) {
+            offsets.push_back(compressed_data.size());
+            continue;
+        }
+
+        if (top_k_parsing.contains(i)) {
+            uint16_t token_id = top_k_parsing.at(i);
+            compressed_data.push_back(token_id);
             offsets.push_back(compressed_data.size());
             continue;
         }
@@ -169,7 +188,7 @@ void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end
     }
 }
 
-std::pair<std::vector<uint8_t>, std::vector<size_t>> OnPairCompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size){
+std::pair<std::vector<uint8_t>, std::vector<size_t>> OnPairDomainCompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size, const std::unordered_map<size_t, uint16_t>& top_k_parsing){
     std::vector<uint8_t> sampled_data;
     std::vector<size_t> sampled_end_positions;
 
@@ -177,7 +196,9 @@ std::pair<std::vector<uint8_t>, std::vector<size_t>> OnPairCompressor::sampling(
     std::vector<size_t> sampled_indices;
 
     for (size_t i=0; i<n; i++) {
-        sampled_indices.push_back(i);
+        if(!top_k_parsing.contains(i)){
+            sampled_indices.push_back(i);
+        }
     }
 
     std::random_device rd;
@@ -194,4 +215,68 @@ std::pair<std::vector<uint8_t>, std::vector<size_t>> OnPairCompressor::sampling(
     }
 
     return {sampled_data, sampled_end_positions};
+}
+
+std::tuple<std::vector<uint8_t>, std::vector<size_t>, std::unordered_map<size_t, uint16_t>> OnPairDomainCompressor::find_top_k(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t k){
+    struct vec_hash {
+        size_t operator()(const std::vector<uint8_t>& vec) const {
+            size_t hash = 0;
+            for (uint8_t byte : vec) {
+                hash ^= std::hash<uint8_t>{}(byte) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+            }
+            return hash;
+        }
+    };
+    
+    std::unordered_map<std::vector<uint8_t>, size_t, vec_hash> scores;
+    std::unordered_map<std::vector<uint8_t>, std::vector<size_t>, vec_hash> indices;
+    size_t n = end_positions.size() - 1;
+
+    for(size_t i=0; i<n; i++){
+        size_t start = end_positions[i];
+        size_t end = end_positions[i+1];
+
+        if (start == end) {
+            continue;
+        }
+
+        std::vector<uint8_t> sequence(data + start, data + end);
+        scores[sequence] += sequence.size();
+        indices[sequence].push_back(i);
+    }
+
+    struct score_compare {
+        bool operator()(const std::pair<std::vector<uint8_t>, size_t>& a, const std::pair<std::vector<uint8_t>, size_t>& b) {
+            return a.second > b.second;
+        }
+    };
+
+    std::priority_queue<std::pair<std::vector<uint8_t>, size_t>, std::vector<std::pair<std::vector<uint8_t>, size_t>>, score_compare> min_heap;
+
+    for (const auto& entry : scores) {
+        if(min_heap.size() < k) {
+            min_heap.push(entry);
+        } else if (entry.second > min_heap.top().second) {
+            min_heap.pop();
+            min_heap.push(entry);
+        }
+    }
+
+    std::vector<uint8_t> top_k_sequences;
+    std::vector<size_t> top_k_end_positions;
+    std::unordered_map<size_t, uint16_t> top_k_parsing;
+
+    top_k_end_positions.push_back(0);
+    while(!min_heap.empty()){
+        auto sequence = min_heap.top().first;
+        min_heap.pop();
+
+        top_k_sequences.insert(top_k_sequences.end(), sequence.begin(), sequence.end());
+        for(size_t index : indices[sequence]){
+            top_k_parsing[index] = top_k_end_positions.size() - 1;
+        }
+        top_k_end_positions.push_back(top_k_sequences.size());
+    }
+
+    return {top_k_sequences, top_k_end_positions, top_k_parsing};
 }
