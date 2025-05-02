@@ -1,6 +1,7 @@
 #include "onpair16_compressor.h"
 #include <cstring>
 #include <robin_hood.h>
+#include <random>
 
 OnPair16Compressor::OnPair16Compressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
@@ -10,7 +11,8 @@ OnPair16Compressor::OnPair16Compressor(size_t data_size, size_t n_elements) {
 }
 
 void OnPair16Compressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    LongestPrefixMatcher16<uint16_t> lpm = train(data, end_positions);
+    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, 32 * 1024 * 1024);
+    LongestPrefixMatcher16<uint16_t> lpm = train(sampled_data.data(), sampled_end_positions);
     parse(data, end_positions, lpm);
 }
 
@@ -158,4 +160,31 @@ void OnPair16Compressor::parse(const uint8_t* data, const std::vector<size_t>& e
 
         offsets.push_back(compressed_data.size());
     }
+}
+
+std::pair<std::vector<uint8_t>, std::vector<size_t>> OnPair16Compressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size){
+    std::vector<uint8_t> sampled_data;
+    std::vector<size_t> sampled_end_positions;
+
+    size_t n = end_positions.size() - 1;
+    std::vector<size_t> sampled_indices;
+
+    for (size_t i=0; i<n; i++) {
+        sampled_indices.push_back(i);
+    }
+
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(sampled_indices.begin(), sampled_indices.end(), g);
+
+    sampled_end_positions.push_back(0);
+    for(size_t i=0; i<n && sampled_data.size()<=sample_size; i++){
+        size_t index = sampled_indices[i];
+        for(size_t j=end_positions[index]; j<end_positions[index+1]; j++){
+            sampled_data.push_back(data[j]);
+        }
+        sampled_end_positions.push_back(sampled_data.size());
+    }
+
+    return {sampled_data, sampled_end_positions};
 }
