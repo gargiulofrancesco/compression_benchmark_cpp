@@ -2,6 +2,7 @@
 #include <cstring>
 #include <robin_hood.h>
 #include <random>
+#include <queue>
 
 OnPairCompressor::OnPairCompressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
@@ -77,7 +78,7 @@ const char* OnPairCompressor::name() const {
 LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     dictionary_offsets.push_back(0);
     
-    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, PairHash> frequency;
+    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, pair_hash> frequency;
     LongestPrefixMatcher lpm;   
     uint16_t next_token_id = 256;
 
@@ -193,4 +194,68 @@ std::pair<std::vector<uint8_t>, std::vector<size_t>> OnPairCompressor::sampling(
     }
 
     return {sampled_data, sampled_end_positions};
+}
+
+std::tuple<std::vector<uint8_t>, std::vector<size_t>, std::unordered_map<size_t, uint16_t>> OnPairCompressor::find_top_k(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t k){
+    struct vec_hash {
+        size_t operator()(const std::vector<uint8_t>& vec) const {
+            size_t hash = 0;
+            for (uint8_t byte : vec) {
+                hash ^= std::hash<uint8_t>{}(byte) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+            }
+            return hash;
+        }
+    };
+    
+    std::unordered_map<std::vector<uint8_t>, size_t, vec_hash> scores;
+    std::unordered_map<std::vector<uint8_t>, std::vector<size_t>, vec_hash> indices;
+    size_t n = end_positions.size() - 1;
+
+    for(size_t i=0; i<n; i++){
+        size_t start = end_positions[i];
+        size_t end = end_positions[i+1];
+
+        if (start == end) {
+            continue;
+        }
+
+        std::vector<uint8_t> sequence(data + start, data + end);
+        scores[sequence] += sequence.size();
+        indices[sequence].push_back(i);
+    }
+
+    struct score_compare {
+        bool operator()(const std::pair<std::vector<uint8_t>, size_t>& a, const std::pair<std::vector<uint8_t>, size_t>& b) {
+            return a.second > b.second;
+        }
+    };
+
+    std::priority_queue<std::pair<std::vector<uint8_t>, size_t>, std::vector<std::pair<std::vector<uint8_t>, size_t>>, score_compare> min_heap;
+
+    for (const auto& entry : scores) {
+        if(min_heap.size() < k) {
+            min_heap.push(entry);
+        } else if (entry.second > min_heap.top().second) {
+            min_heap.pop();
+            min_heap.push(entry);
+        }
+    }
+
+    std::vector<uint8_t> top_k_sequences;
+    std::vector<size_t> top_k_end_positions;
+    std::unordered_map<size_t, uint16_t> top_k_indices;
+
+    top_k_end_positions.push_back(0);
+    while(!min_heap.empty()){
+        auto sequence = min_heap.top().first;
+        min_heap.pop();
+
+        top_k_sequences.insert(top_k_sequences.end(), sequence.begin(), sequence.end());
+        for(size_t index : indices[sequence]){
+            top_k_indices[index] = top_k_end_positions.size() - 1;
+        }
+        top_k_end_positions.push_back(top_k_sequences.size());
+    }
+
+    return {top_k_sequences, top_k_end_positions, top_k_indices};
 }

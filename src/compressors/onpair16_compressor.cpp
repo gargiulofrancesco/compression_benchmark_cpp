@@ -69,7 +69,7 @@ const char* OnPair16Compressor::name() const {
 LongestPrefixMatcher16<uint16_t> OnPair16Compressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     dictionary_offsets.push_back(0);
     
-    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, PairHash> frequency;
+    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, pair_hash> frequency;
     LongestPrefixMatcher16<uint16_t> lpm;   
     uint16_t next_token_id = 256;
 

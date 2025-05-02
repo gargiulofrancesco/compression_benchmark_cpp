@@ -17,6 +17,7 @@ private:
     LongestPrefixMatcher train(const uint8_t* data, const std::vector<size_t>& end_positions);
     void parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm);
     std::pair<std::vector<uint8_t>, std::vector<size_t>> sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size);
+    std::tuple<std::vector<uint8_t>, std::vector<size_t>, std::unordered_map<size_t, uint16_t>> find_top_k(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t k);
 
 public:
     OnPairCompressor(size_t data_size, size_t n_elements);

@@ -26,7 +26,7 @@ private:
         0xFFFFFFFFFFFFFFFFULL  // 8 bytes
     };
 
-    using Dictionary = robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, V, PairHash>;
+    using Dictionary = robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, V, pair_hash>;
     using Bucket = std::vector<std::pair<std::pair<uint64_t, uint8_t>, V>>;
     using BucketMap =  robin_hood::unordered_map<uint64_t, Bucket>;
 
