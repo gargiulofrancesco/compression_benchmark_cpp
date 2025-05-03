@@ -3,59 +3,47 @@
 #include <map>
 #include <stdexcept>
 #include "simdjson.h"
+#include <random>
 
-Dataset load_dataset(const std::filesystem::path& path) {
+std::pair<std::vector<uint8_t>, std::vector<size_t>> load_dataset(const std::filesystem::path& path) {
     std::ifstream file(path);
     if (!file) {
         throw std::runtime_error("Failed to open file: " + path.string());
     }
 
+    // Parse the JSON file
     simdjson::ondemand::parser parser;
     simdjson::padded_string json = simdjson::padded_string::load(path.string());
-    
+
     auto doc = parser.iterate(json);
-    Dataset dataset;
-    
-    // Get dataset name
-    dataset.dataset_name = std::string(doc["dataset_name"].get_string().value());
-    
-    // Load data array
-    dataset.data.clear();
-    for (auto value : doc["data"]) {
-        dataset.data.push_back(std::string(value.get_string().value()));
-    }
-    
-    // Load queries array
-    dataset.queries.clear();
-    for (auto value : doc["queries"]) {
-        dataset.queries.push_back(value.get_uint64().value());
+    std::vector<std::string> strings;
+    for(auto str : doc){
+        strings.push_back(std::string(str.get_string().value()));
     }
 
-    return dataset;
-}
-
-std::vector<Dataset> load_datasets(const std::filesystem::path& dir) {
-    std::vector<Dataset> datasets;
-    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".json") {
-            datasets.push_back(load_dataset(entry.path()));
-        }
-    }
-    return datasets;
-}
-
-std::tuple<std::string, std::vector<uint8_t>, std::vector<size_t>, std::vector<size_t>> process_dataset(const Dataset& dataset) {
-    const std::string& dataset_name = dataset.dataset_name;
+    // Process the strings
     std::vector<uint8_t> data;
     std::vector<size_t> end_positions;
-    
+
     end_positions.push_back(0);
-    for (const auto& s : dataset.data) {
-        data.insert(data.end(), s.begin(), s.end());
-        end_positions.push_back(end_positions.back() + s.size());
+    for (const auto& str : strings) {
+        data.insert(data.end(), str.begin(), str.end());
+        end_positions.push_back(end_positions.back() + str.size());
     }
-    
-    return {dataset_name, data, end_positions, dataset.queries};
+
+    return {data, end_positions};
+}
+
+std::vector<size_t> generate_random_queries(size_t n, size_t n_queries){
+    std::vector<size_t> queries;
+    queries.reserve(n_queries);
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<size_t> dist(0, n - 1);
+    for (size_t i = 0; i < n_queries; ++i) {
+        queries.push_back(dist(rng));
+    }
+
+    return queries;
 }
 
 std::vector<BenchmarkResult> read_benchmark_results(const std::filesystem::path& file_path) {

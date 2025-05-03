@@ -424,8 +424,8 @@ int main(int argc, char* argv[]) {
 
     try {
         // Load dataset
-        Dataset dataset = load_dataset(dataset_path);
-        auto [dataset_name, data, end_positions, queries] = process_dataset(dataset);
+        std::string dataset_name = dataset_path.filename().string();
+        auto [data, end_positions] = load_dataset(dataset_path);
 
         // Initialize the compressor
         BenchmarkResult result;

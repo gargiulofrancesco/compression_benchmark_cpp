@@ -11,7 +11,7 @@ OnPair16Compressor::OnPair16Compressor(size_t data_size, size_t n_elements) {
 }
 
 void OnPair16Compressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, 32 * 1024 * 1024);
+    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, SAMPLE_SIZE);
     LongestPrefixMatcher16<uint16_t> lpm = train(sampled_data.data(), sampled_end_positions);
     parse(data, end_positions, lpm);
 }

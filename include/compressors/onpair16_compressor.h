@@ -9,6 +9,7 @@ private:
     static constexpr size_t THRESHOLD = 10;
     static constexpr size_t MAX_LENGTH = 16;
     static constexpr size_t MAX_TOKENS = 65535;
+    static constexpr size_t SAMPLE_SIZE = 32 * 1024 * 1024;
 
     std::vector<uint16_t> compressed_data;
     std::vector<size_t> offsets;
