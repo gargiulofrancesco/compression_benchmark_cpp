@@ -28,7 +28,6 @@ private:
     static constexpr size_t MIN_MATCH = 8;
 
     robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, uint16_t, pair_hash> short_match_lookup;
-    // robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, uint16_t, robin_hood::hash<std::pair<uint64_t, uint8_t>>> short_match_lookup;
     robin_hood::unordered_map<uint64_t, std::vector<uint16_t>> long_match_buckets;
     std::vector<uint8_t> dictionary;
     std::vector<uint32_t> end_positions;

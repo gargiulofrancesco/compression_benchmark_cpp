@@ -11,7 +11,6 @@
 #include <robin_hood.h>
 #include "pair_hash.h"
 
-template<typename V>
 class LongestPrefixMatcher16 {
 private:
     static constexpr uint64_t MASKS[] = {
@@ -26,12 +25,8 @@ private:
         0xFFFFFFFFFFFFFFFFULL  // 8 bytes
     };
 
-    using Dictionary = robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, V, pair_hash>;
-    using Bucket = std::vector<std::pair<std::pair<uint64_t, uint8_t>, V>>;
-    using BucketMap =  robin_hood::unordered_map<uint64_t, Bucket>;
-
-    Dictionary dictionary;
-    BucketMap buckets;
+    robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, uint16_t, pair_hash> dictionary;
+    robin_hood::unordered_map<uint64_t, std::vector<std::tuple<uint64_t, uint8_t, uint16_t>>> buckets;
 
     static inline uint64_t bytes_to_u64_le(const uint8_t* bytes, size_t len) {
         uint64_t value = *reinterpret_cast<const uint64_t*>(bytes);
@@ -49,7 +44,7 @@ private:
 public:
     LongestPrefixMatcher16() = default;
 
-    inline void insert(const uint8_t* data, size_t length, V id) {
+    inline void insert(const uint8_t* data, size_t length, uint16_t id) {
         if (length <= 8) {
             uint64_t value = bytes_to_u64_le(data, length);
             dictionary.emplace(std::make_pair(value, static_cast<uint8_t>(length)), id);
@@ -59,35 +54,30 @@ public:
             uint64_t suffix = bytes_to_u64_le(data + 8, suffix_len);
             
             auto& bucket = buckets[prefix];
-            bucket.emplace_back(
-                std::make_pair(
-                    std::make_pair(suffix, static_cast<uint8_t>(suffix_len)), 
-                    id
-                )
-            );
+            bucket.emplace_back(suffix, static_cast<uint8_t>(suffix_len), id);
             
             // Sort by suffix length in descending order
             std::sort(bucket.begin(), bucket.end(),
                 [](const auto& a, const auto& b) {
-                    return b.first.second < a.first.second;
+                    return std::get<1>(b) < std::get<1>(a);
                 });
         }
     }
 
-    inline std::optional<std::pair<V, size_t>> find_longest_match(const uint8_t* data, size_t length) const {
+    inline std::optional<std::pair<uint16_t, size_t>> find_longest_match(const uint8_t* data, size_t length) const {
         // Long match handling
         if (length > 8) {
             size_t suffix_len = std::min(length, size_t{16}) - 8;
             uint64_t prefix = bytes_to_u64_le(data, 8);
             uint64_t suffix = bytes_to_u64_le(data + 8, suffix_len);
-            
+
             auto bucket_it = buckets.find(prefix);
             if (bucket_it != buckets.end()) {
                 const auto& bucket = bucket_it->second;
                 for (const auto& entry : bucket) {
-                    const auto& [entry_suffix, entry_suffix_len] = entry.first;
+                    const auto& [entry_suffix, entry_suffix_len, entry_id] = entry;
                     if (is_prefix(suffix, entry_suffix, suffix_len, entry_suffix_len)) {
-                        return std::make_pair(entry.second, 8 + entry_suffix_len);
+                        return std::make_pair(entry_id, 8 + entry_suffix_len);
                     }
                 }
             }
