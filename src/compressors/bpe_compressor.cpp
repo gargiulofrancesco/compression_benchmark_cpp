@@ -1,6 +1,5 @@
 #include <unordered_set>
 #include <queue>
-#include <iostream>
 #include <algorithm>
 #include "bpe_compressor.h"
 
@@ -33,11 +32,6 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
     // Initialize pair positions    
     robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, robin_hood::unordered_set<size_t>, pair_hash> pair_positions;
     for (size_t i=0; i<end_positions.back()-1; i++) {
-        if(i % (32 * 1024 * 1024) == 0){
-            auto percentage = static_cast<float>(i) / end_positions.back();
-            std::cout << "Progress: " << percentage * 100 << "%\n";
-        }
-
         if(end_positions_set.contains(i+1)) {
             continue;
         }
@@ -76,13 +70,6 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
         auto end = bit_vector.next_one(bit_vector.next_one(start).value()).value_or(end_positions.back());
         dictionary_data.insert(dictionary_data.end(), data + start, data + end);
         dictionary_offsets.push_back(dictionary_data.size());
-
-        // Print the newly merged pair
-        std::cout << next_token_id << ": \"";
-        for (size_t i=start; i<end; i++) {
-            std::cout << static_cast<char>(data[i]);
-        }
-        std::cout << "\"\n";
 
         // Store updated pairs to minimize insertions in the heap
         robin_hood::unordered_set<std::pair<uint16_t, uint16_t>, pair_hash> updated_pairs_set;
