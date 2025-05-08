@@ -9,7 +9,6 @@ private:
     static constexpr size_t THRESHOLD = 10;
     static constexpr size_t FAST_ACCESS_SIZE = 16;
     static constexpr size_t MAX_TOKENS = 65535;
-    static constexpr size_t SAMPLE_SIZE = 32 * 1024 * 1024;
 
     std::vector<uint16_t> compressed_data;
     std::vector<size_t> offsets;
@@ -18,7 +17,6 @@ private:
 
     LongestPrefixMatcher train(const uint8_t* data, const std::vector<size_t>& end_positions);
     void parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm);
-    std::pair<std::vector<uint8_t>, std::vector<size_t>> sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size);
 
 public:
     OnPairCompressor(size_t data_size, size_t n_elements);

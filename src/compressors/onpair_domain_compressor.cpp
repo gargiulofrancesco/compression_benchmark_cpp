@@ -13,8 +13,7 @@ OnPairDomainCompressor::OnPairDomainCompressor(size_t data_size, size_t n_elemen
 
 void OnPairDomainCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
     auto [top_k_data, top_k_end_positions, top_k_parsing] = find_top_k(data, end_positions, K);
-    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, SAMPLE_SIZE, top_k_parsing);
-    LongestPrefixMatcher lpm = train(sampled_data.data(), sampled_end_positions);
+    LongestPrefixMatcher lpm = train(data, end_positions);
 
     size_t top_k_base_id = dictionary_offsets.size() - 1;
     dictionary_data.insert(dictionary_data.end(), top_k_data.begin(), top_k_data.end());
@@ -102,10 +101,19 @@ LongestPrefixMatcher OnPairDomainCompressor::train(const uint8_t* data, const st
         dictionary_offsets.push_back(dictionary_data.size());
     }
 
+    // Shuffle entries
+    std::vector<int> shuffled_indices;
+    for (int i=0; i<end_positions.size()-1; i++) {
+        shuffled_indices.push_back(i);
+    }
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), g);
+
     // Iterate over entries
-    for(int i=0; i<end_positions.size()-1; i++) {
-        size_t start = end_positions[i];
-        size_t end = end_positions[i+1];
+    for(auto index : shuffled_indices){    
+        size_t start = end_positions[index];
+        size_t end = end_positions[index+1];
 
         if (next_token_id == MAX_TOKENS) {
             break; 
@@ -186,35 +194,6 @@ void OnPairDomainCompressor::parse(const uint8_t* data, const std::vector<size_t
 
         offsets.push_back(compressed_data.size());
     }
-}
-
-std::pair<std::vector<uint8_t>, std::vector<size_t>> OnPairDomainCompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size, const std::unordered_map<size_t, uint16_t>& top_k_parsing){
-    std::vector<uint8_t> sampled_data;
-    std::vector<size_t> sampled_end_positions;
-
-    size_t n = end_positions.size() - 1;
-    std::vector<size_t> sampled_indices;
-
-    for (size_t i=0; i<n; i++) {
-        if(!top_k_parsing.contains(i)){
-            sampled_indices.push_back(i);
-        }
-    }
-
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(sampled_indices.begin(), sampled_indices.end(), g);
-
-    sampled_end_positions.push_back(0);
-    for(size_t i=0; i<n && sampled_data.size()<=sample_size; i++){
-        size_t index = sampled_indices[i];
-        for(size_t j=end_positions[index]; j<end_positions[index+1]; j++){
-            sampled_data.push_back(data[j]);
-        }
-        sampled_end_positions.push_back(sampled_data.size());
-    }
-
-    return {sampled_data, sampled_end_positions};
 }
 
 std::tuple<std::vector<uint8_t>, std::vector<size_t>, std::unordered_map<size_t, uint16_t>> OnPairDomainCompressor::find_top_k(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t k){
