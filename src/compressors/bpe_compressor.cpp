@@ -88,11 +88,12 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
 
             // Update (t0, t1) and (t0, next_id)     
             if (t0_pos.has_value() && !end_positions_set.contains(t1_pos)) {
-                // Update (t0, t1)
                 auto t0 = token_ids[t0_pos.value()];
-                pair_positions[{t0, t1}].erase(t0_pos.value());
-                updated_pairs_set.insert({t0, t1});
-
+                // Update (t0, t1)
+                if (t0!=t1 || t1!=t2) {
+                    pair_positions[{t0, t1}].erase(t0_pos.value());
+                    updated_pairs_set.insert({t0, t1});
+                }
                 // Update (t0, next_id)
                 pair_positions[{t0, next_token_id}].insert(t0_pos.value());
                 updated_pairs_set.insert({t0, next_token_id});
@@ -100,11 +101,12 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
 
             // Update (t2, t3) and (next_id, t3)
             if (t3_pos.has_value() && !end_positions_set.contains(t3_pos.value())) {
-                // Update (t2, t3)
                 auto t3 = token_ids[t3_pos.value()];
-                pair_positions[{t2, t3}].erase(t2_pos);
-                updated_pairs_set.insert({t2, t3});
-
+                // Update (t2, t3)
+                if(t2!=t1 || t3!=t2) {
+                    pair_positions[{t2, t3}].erase(t2_pos);
+                    updated_pairs_set.insert({t2, t3});
+                }
                 // Update (next_id, t3)
                 pair_positions[{next_token_id, t3}].insert(t1_pos);
                 updated_pairs_set.insert({next_token_id, t3});
@@ -119,27 +121,24 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
 
         // Update the heap
         for (const auto& pair : updated_pairs_set) {
-            if(pair != std::make_pair(t1, t2)) {
-                auto frequency = pair_positions[pair].size();
-                heap.push({frequency, pair});
-            }
+            auto frequency = pair_positions[pair].size();
+            heap.push({frequency, pair});
         }
 
         next_token_id++;
     }
 
     // Store the compressed data
-    offsets.push_back(0);
-    for (size_t i=0; i<end_positions.back(); i++) {
-        if (!bit_vector.get(i).value()) {
-            continue;
+    size_t i = 0;
+    for (auto end_pos : end_positions) {
+        while (i < end_pos) {
+            if (bit_vector.get(i).value()) {
+                compressed_data.push_back(token_ids[i]);
+            }
+            i++;
         }
-        compressed_data.push_back(token_ids[i]);
-        if(end_positions_set.contains(i)) {
-            offsets.push_back(compressed_data.size());
-        }
+        offsets.push_back(compressed_data.size());
     }
-    offsets.push_back(compressed_data.size());
 }
 
 // Assumes buffer has enough space to store the decompressed data
@@ -199,73 +198,3 @@ size_t BPECompressor::space_used_bytes() const {
 const char* BPECompressor::name() const {
     return "BPE";
 }
-
-/*
-std::vector<uint16_t> BPECompressor::initialize_token_ids(
-    const uint8_t* data, 
-    const std::vector<size_t>& end_positions,
-    const BitVector& bv,
-    uint16_t& next_id
-) const {
-    std::vector<uint16_t> token_ids(end_positions.back(), 0);
-    std::unordered_map<std::vector<uint8_t>, uint16_t> map;
-
-    auto it = bv.ones_begin();
-    auto end = bv.ones_end();
-
-    if (it == end) return token_ids; 
-
-    size_t current_pos = *it++;
-    if (it == end) {
-        const uint8_t* slice = data + current_pos;
-        uint16_t id = get_or_insert_token(map, slice, data.size() - current_pos, next_id);
-        token_ids[current_pos] = id;
-        return token_ids;
-    }
-
-    while (it != end) {
-        size_t next_pos = *it++;
-
-        assert(current_pos < next_pos && next_pos <= end_positions.back());
-
-        const uint8_t* slice = data + current_pos;
-        size_t len = next_pos - current_pos;
-        uint16_t id = get_or_insert_token(map, slice, len, next_id);
-        token_ids[current_pos] = id;
-
-        current_pos = next_pos;
-    }
-
-    // Final slice from current_pos to end
-    if (current_pos < end_positions.back()) {
-        const uint8_t* slice = data + current_pos;
-        size_t len = end_positions.back() - current_pos;
-        uint16_t id = get_or_insert_token(map, slice, len, next_id);
-        token_ids[current_pos] = id;
-    }
-
-    token_ids.shrink_to_fit();
-
-    return token_ids;
-}
-
-uint16_t BPECompressor::get_or_insert_token(
-    std::unordered_map<std::vector<uint8_t>, uint16_t>& map,
-    const uint8_t* substr_start,
-    size_t substr_len,
-    uint16_t& next_id
-) const{
-    if (substr_len == 1) {
-        return substr_start[0];
-    }
-
-    std::vector<uint8_t> substr(substr_start, substr_start + substr_len);
-    auto it = map.find(substr);
-    if (it != map.end()) {
-        return it->second;
-    } else {
-        map[substr] = next_id;
-        return next_id++;
-    }
-}
-*/
