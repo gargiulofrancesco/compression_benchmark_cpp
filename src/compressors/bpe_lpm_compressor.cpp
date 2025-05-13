@@ -79,7 +79,7 @@ const char* BPELPMCompressor::name() const {
 LongestPrefixMatcher BPELPMCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     LongestPrefixMatcher lpm;
     
-    // Initialize the dictionary
+    // Initialize the dictionary with single-byte tokens
     dictionary_offsets.push_back(0);
     for(uint16_t i=0; i<=255; i++) {
         uint8_t value = static_cast<uint8_t>(i);
@@ -96,6 +96,8 @@ LongestPrefixMatcher BPELPMCompressor::train(const uint8_t* data, const std::vec
 
     // The bitvector inidicates with zeroes the positions of merged bytes
     BitVector bit_vector = BitVector::with_ones(end_positions.back());
+    
+    // Strings end positions are used to avoid merging pairs that cross multiple strings
     robin_hood::unordered_set<size_t> end_positions_set(end_positions.begin() + 1, end_positions.end());
 
     // Initialize pair positions    
@@ -135,11 +137,16 @@ LongestPrefixMatcher BPELPMCompressor::train(const uint8_t* data, const std::vec
         pair_positions.erase({t1, t2});
 
         // Add the new token to the dictionary
-        auto start = positions.front();
-        auto end = bit_vector.next_one(bit_vector.next_one(start).value()).value_or(end_positions.back());
-        dictionary_data.insert(dictionary_data.end(), data + start, data + end);
+        auto t1_start = dictionary_offsets[t1];
+        auto t1_end = dictionary_offsets[t1 + 1];
+        auto t2_start = dictionary_offsets[t2];
+        auto t2_end = dictionary_offsets[t2 + 1];
+        std::vector<uint8_t> merged_token;
+        merged_token.insert(merged_token.end(), dictionary_data.data() + t1_start, dictionary_data.data() + t1_end);
+        merged_token.insert(merged_token.end(), dictionary_data.data() + t2_start, dictionary_data.data() + t2_end);
+        dictionary_data.insert(dictionary_data.end(), merged_token.begin(), merged_token.end());
         dictionary_offsets.push_back(dictionary_data.size());
-        lpm.insert(data + start, end - start, next_token_id);
+        lpm.insert(merged_token.data(), merged_token.size(), next_token_id);
 
         // Store updated pairs to minimize insertions in the heap
         robin_hood::unordered_set<std::pair<uint16_t, uint16_t>, pair_hash> updated_pairs_set;
