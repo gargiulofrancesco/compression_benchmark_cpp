@@ -1,22 +1,26 @@
-#ifndef BPE_COMPRESSOR_H
-#define BPE_COMPRESSOR_H
+#ifndef BPE_LPM_COMPRESSOR_H
+#define BPE_LPM_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
+#include "lpm.h"
 
-class BPECompressor : public Compressor<BPECompressor> {
+class BPELPMCompressor : public Compressor<BPELPMCompressor> {
 private:
     static constexpr size_t MAX_TOKENS = 65535;
     static constexpr size_t FAST_ACCESS_SIZE = 16;
+    static constexpr size_t SAMPLE_SIZE = 8 * 1024 * 1024;
 
     std::vector<uint16_t> compressed_data;
     std::vector<size_t> offsets;
     std::vector<uint8_t> dictionary_data;
     std::vector<uint32_t> dictionary_offsets;
 
-    void merge(const uint8_t* data, const std::vector<size_t>& end_positions);
+    LongestPrefixMatcher train(const uint8_t* data, const std::vector<size_t>& end_positions);
+    void parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm);
+    std::pair<std::vector<uint8_t>, std::vector<size_t>> sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size);
 
 public:
-BPECompressor(size_t data_size, size_t n_elements);
+BPELPMCompressor(size_t data_size, size_t n_elements);
 
     // Derived class method implementations
     void compress(const uint8_t* data, const std::vector<size_t>& end_positions);
@@ -26,4 +30,4 @@ BPECompressor(size_t data_size, size_t n_elements);
     const char* name() const;
 };
 
-#endif // BPE_COMPRESSOR_H
+#endif // BPE_LPM_COMPRESSOR_H

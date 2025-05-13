@@ -1,21 +1,89 @@
 #include <queue>
 #include <robin_hood.h>
-#include "bitvector.h"
-#include "bpe_compressor.h"
+#include <random>
+#include "bpe_lpm_compressor.h"
 #include "pair_hash.h"
+#include "bitvector.h"
 
-BPECompressor::BPECompressor(size_t data_size, size_t n_elements) {
+BPELPMCompressor::BPELPMCompressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
     offsets.reserve(n_elements);
     dictionary_data.reserve(2 * (1024 * 1024)); // 2 MB
     dictionary_offsets.reserve(1 << 16);
 }
 
-void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) { 
+void BPELPMCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) { 
+    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, SAMPLE_SIZE);
+    LongestPrefixMatcher lpm = train(sampled_data.data(), sampled_end_positions);
+    parse(data, end_positions, lpm);
+}
+
+// Assumes buffer has enough space to store the decompressed data
+size_t BPELPMCompressor::decompress(uint8_t* buffer) const {
+    const uint8_t* dict_ptr = dictionary_data.data();
+    const uint32_t* offsets_ptr = dictionary_offsets.data();
+    size_t size = 0;
+
+    for (uint16_t token_id : compressed_data) {
+        size_t dict_start = offsets_ptr[token_id];
+        size_t dict_end = offsets_ptr[token_id + 1];
+        size_t length = dict_end - dict_start;
+
+        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
+        if(length > FAST_ACCESS_SIZE) {
+            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
+        }
+
+        size += length;
+    }
+
+    return size;
+}
+
+// Assumes buffer has enough space to store the decompressed data
+size_t BPELPMCompressor::get_item_at(size_t index, uint8_t* buffer) const {
+    const uint8_t* dict_ptr = dictionary_data.data();
+    const uint32_t* offsets_ptr = dictionary_offsets.data();
+    size_t size = 0;
+
+    size_t data_start = offsets[index];
+    size_t data_end = offsets[index + 1];
+
+    for (size_t i = data_start; i < data_end; i++) {
+        uint16_t token_id = compressed_data[i];
+
+        size_t dict_start = offsets_ptr[token_id];
+        size_t dict_end = offsets_ptr[token_id + 1];
+        size_t length = dict_end - dict_start;
+
+        // Copy the dictionary entry to the buffer
+        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
+        if(length > FAST_ACCESS_SIZE) {
+            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
+        }
+
+        size += length;
+    }
+
+    return size;
+}
+
+size_t BPELPMCompressor::space_used_bytes() const {
+    return compressed_data.size() * sizeof(uint16_t) + dictionary_data.size() + dictionary_offsets.size() * sizeof(uint32_t);
+}
+
+const char* BPELPMCompressor::name() const {
+    return "BPE_LPM";
+}
+
+LongestPrefixMatcher BPELPMCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
+    LongestPrefixMatcher lpm;
+    
     // Initialize the dictionary
     dictionary_offsets.push_back(0);
     for(uint16_t i=0; i<=255; i++) {
         uint8_t value = static_cast<uint8_t>(i);
+        lpm.insert(&value, 1, i);
         dictionary_data.push_back(value);
         dictionary_offsets.push_back(dictionary_data.size());
     }
@@ -71,6 +139,7 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
         auto end = bit_vector.next_one(bit_vector.next_one(start).value()).value_or(end_positions.back());
         dictionary_data.insert(dictionary_data.end(), data + start, data + end);
         dictionary_offsets.push_back(dictionary_data.size());
+        lpm.insert(data + start, end - start, next_token_id);
 
         // Store updated pairs to minimize insertions in the heap
         robin_hood::unordered_set<std::pair<uint16_t, uint16_t>, pair_hash> updated_pairs_set;
@@ -129,73 +198,60 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
         next_token_id++;
     }
 
-    // Store the compressed data
-    size_t i = 0;
-    for (auto end_pos : end_positions) {
-        while (i < end_pos) {
-            if (bit_vector.get(i).value()) {
-                compressed_data.push_back(token_ids[i]);
-            }
-            i++;
+    return std::move(lpm);
+}
+
+void BPELPMCompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm) {
+    offsets.push_back(0);
+
+    for(int i=0; i<end_positions.size()-1; i++) {
+        size_t start = end_positions[i];
+        size_t end = end_positions[i+1];
+
+        if (start == end) {
+            offsets.push_back(compressed_data.size());
+            continue;
         }
+
+        size_t pos = start;
+        while (pos < end) {
+            // Find the longest match
+            auto match = lpm.find_longest_match(data + pos, end - pos);
+            uint16_t token_id = match->first;
+            size_t length = match->second;
+
+            compressed_data.push_back(token_id);
+
+            pos += length;
+        }
+
         offsets.push_back(compressed_data.size());
     }
 }
 
-// Assumes buffer has enough space to store the decompressed data
-size_t BPECompressor::decompress(uint8_t* buffer) const {
-    const uint8_t* dict_ptr = dictionary_data.data();
-    const uint32_t* offsets_ptr = dictionary_offsets.data();
-    size_t size = 0;
+std::pair<std::vector<uint8_t>, std::vector<size_t>> BPELPMCompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size){
+    std::vector<uint8_t> sampled_data;
+    std::vector<size_t> sampled_end_positions;
 
-    for (uint16_t token_id : compressed_data) {
-        size_t dict_start = offsets_ptr[token_id];
-        size_t dict_end = offsets_ptr[token_id + 1];
-        size_t length = dict_end - dict_start;
+    size_t n = end_positions.size() - 1;
+    std::vector<size_t> sampled_indices;
 
-        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
-        if(length > FAST_ACCESS_SIZE) {
-            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
-        }
-
-        size += length;
+    for (size_t i=0; i<n; i++) {
+        sampled_indices.push_back(i);
     }
 
-    return size;
-}
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(sampled_indices.begin(), sampled_indices.end(), g);
 
-// Assumes buffer has enough space to store the decompressed data
-size_t BPECompressor::get_item_at(size_t index, uint8_t* buffer) const {
-    const uint8_t* dict_ptr = dictionary_data.data();
-    const uint32_t* offsets_ptr = dictionary_offsets.data();
-    size_t size = 0;
-
-    size_t data_start = offsets[index];
-    size_t data_end = offsets[index + 1];
-
-    for (size_t i = data_start; i < data_end; i++) {
-        uint16_t token_id = compressed_data[i];
-
-        size_t dict_start = offsets_ptr[token_id];
-        size_t dict_end = offsets_ptr[token_id + 1];
-        size_t length = dict_end - dict_start;
-
-        // Copy the dictionary entry to the buffer
-        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
-        if(length > FAST_ACCESS_SIZE) {
-            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
+    sampled_end_positions.push_back(0);
+    for(size_t i=0; i<n && sampled_data.size()<=sample_size; i++){
+        size_t index = sampled_indices[i];
+        for(size_t j=end_positions[index]; j<end_positions[index+1]; j++){
+            sampled_data.push_back(data[j]);
         }
-
-        size += length;
+        sampled_end_positions.push_back(sampled_data.size());
     }
 
-    return size;
-}
-
-size_t BPECompressor::space_used_bytes() const {
-    return compressed_data.size() * sizeof(uint16_t) + dictionary_data.size() + dictionary_offsets.size() * sizeof(uint32_t);
-}
-
-const char* BPECompressor::name() const {
-    return "BPE";
+    return {sampled_data, sampled_end_positions};
 }

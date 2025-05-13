@@ -32,6 +32,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Processing dataset \"" << dataset_path << "\"\n";
 
             for (const auto& compressor: COMPRESSORS) {
+                std::cout << "- " << compressor << "\n";
                 for (size_t i = 0; i < N_ITERATIONS; ++i) {
                     int status = std::system((BENCHMARK_PATH + " " + dataset_path + " " + compressor + " " + OUTPUT_FILE).c_str());
                     if (status != 0) {

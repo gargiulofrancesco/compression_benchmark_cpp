@@ -15,9 +15,9 @@
 #include "zstd_compressor.h"
 #include "onpair16_compressor.h"
 #include "onpair_compressor.h"
-#include "onpair_domain_compressor.h"
 #include "deflate_individual_compressor.h"
 #include "bpe_compressor.h"
+#include "bpe_lpm_compressor.h"
 #include "benchmark_utils.h"
 
 const int DEFAULT_CORE_ID = 0;
@@ -160,16 +160,16 @@ int main(int argc, char* argv[]) {
             OnPairCompressor compressor = OnPairCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
-        else if (compressor_name == "onpair_domain") {
-            OnPairDomainCompressor compressor = OnPairDomainCompressor::create(data.size(), end_positions.size()-1);
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        }
         else if (compressor_name == "deflate_individual") {
             DeflateIndividualCompressor compressor = DeflateIndividualCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "bpe") {
             BPECompressor compressor = BPECompressor::create(data.size(), end_positions.size()-1);
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "bpe_lpm") {
+            BPELPMCompressor compressor = BPELPMCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {
