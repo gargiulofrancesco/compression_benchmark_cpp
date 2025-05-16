@@ -136,12 +136,16 @@ LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vec
                 dictionary_data.insert(dictionary_data.end(), data + pos - previous_length, data + pos + match_length);
                 dictionary_offsets.push_back(dictionary_data.size());
                 
-                next_token_id++;
                 frequency.erase(token_pair);
+                previous_token_id = next_token_id;
+                previous_length += match_length;
+                next_token_id++;
+            }
+            else {
+                previous_token_id = match_token_id;
+                previous_length = match_length;
             }
 
-            previous_token_id = match_token_id;
-            previous_length = match_length;
             pos += match_length;
         }
     }
