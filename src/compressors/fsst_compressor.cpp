@@ -4,17 +4,18 @@
 
 FSSTCompressor::FSSTCompressor(size_t data_size, size_t n_elements) {
     compressed_data.resize(data_size);
-    offsets.resize(n_elements);
-
-    // Preallocate vectors for compression
-    row_lengths.resize(n_elements);
-    row_ptrs.resize(n_elements);
-    compressed_row_lengths.resize(n_elements);
-    compressed_row_ptrs.resize(n_elements + 1);
+    offsets.reserve(n_elements);
 }
 
 void FSSTCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    size_t num_strings = end_positions.size()-1;
+    offsets.push_back(0);
+    size_t num_strings = end_positions.size() - 1;
+
+    // Temporary vectors used during compression
+    std::vector<size_t> row_lengths(num_strings);
+    std::vector<const uint8_t*> row_ptrs(num_strings);
+    std::vector<size_t> compressed_row_lengths(num_strings);
+    std::vector<uint8_t*> compressed_row_ptrs(num_strings);
     
     // Prepare row lengths and pointers based on end positions
     for (size_t i = 0; i < num_strings; ++i) {
@@ -37,9 +38,8 @@ void FSSTCompressor::compress(const uint8_t* data, const std::vector<size_t>& en
     compressed_data.resize(compressed_length);
 
     // Calculate offsets for random access
-    compressed_row_ptrs[num_strings] = compressed_data.data() + compressed_length;
     for (unsigned i = 0; i < num_strings; ++i) {
-        offsets[i] = compressed_row_ptrs[i + 1] - compressed_data.data();
+        offsets.push_back(offsets.back() + compressed_row_lengths[i]);
     }
 
     // Export the dictionary and destroy the encoder
@@ -68,8 +68,8 @@ size_t FSSTCompressor::decompress(uint8_t* buffer) const {
 
 // Assumes buffer has enough space to store the decompressed data
 size_t FSSTCompressor::get_item_at(size_t index, uint8_t* buffer) const {
-    size_t start = (index == 0) ? 0 : offsets[index - 1];
-    size_t end = offsets[index];
+    size_t start = offsets[index];
+    size_t end = offsets[index + 1];
     size_t max_decompressed_size = offsets.back();
 
     size_t decompressed_length = fsst_decompress(

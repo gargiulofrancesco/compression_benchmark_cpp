@@ -10,12 +10,6 @@ private:
     std::vector<size_t> offsets;
     fsst_decoder_t decoder;
 
-    // Temporary vectors used during compression
-    std::vector<size_t> row_lengths;
-    std::vector<const uint8_t*> row_ptrs;
-    std::vector<size_t> compressed_row_lengths;
-    std::vector<uint8_t*> compressed_row_ptrs;
-
 public:
     FSSTCompressor(size_t data_size, size_t n_elements);
 
