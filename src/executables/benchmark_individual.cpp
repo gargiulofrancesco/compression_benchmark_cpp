@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include "copy_compressor.h"
 #include "fsst_compressor.h"
+#include "fsst_block_compressor.h"
 #include "lz4_compressor.h"
 #include "snappy_compressor.h"
 #include "xz_compressor.h"
@@ -152,6 +153,10 @@ int main(int argc, char* argv[]) {
             FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         } 
+        else if (compressor_name == "fsst_block") {
+            FSSTBlockCompressor compressor = FSSTBlockCompressor::create(data.size(), end_positions.size()-1);
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
         else if (compressor_name == "onpair16") {
             OnPair16Compressor compressor = OnPair16Compressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
