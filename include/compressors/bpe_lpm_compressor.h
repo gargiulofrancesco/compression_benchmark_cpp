@@ -6,7 +6,6 @@
 
 class BPELPMCompressor : public Compressor<BPELPMCompressor> {
 private:
-    static constexpr size_t MAX_TOKENS = 65535;
     static constexpr size_t FAST_ACCESS_SIZE = 16;
     static constexpr size_t SAMPLE_SIZE = 8 * 1024 * 1024;
 

@@ -121,8 +121,8 @@ LongestPrefixMatcher BPELPMCompressor::train(const uint8_t* data, const std::vec
 
     // Merge pairs
     uint32_t next_token_id = 256;
-    while (next_token_id<MAX_TOKENS && !heap.empty()) {
-        // Get the pair with the maximum (uodated) frequency
+    while (!heap.empty()) {
+        // Get the pair with the maximum (updated) frequency
         if(heap.top().first != pair_positions[heap.top().second].size()) {
             heap.pop();
             continue;
@@ -200,6 +200,10 @@ LongestPrefixMatcher BPELPMCompressor::train(const uint8_t* data, const std::vec
         for (const auto& pair : updated_pairs_set) {
             auto frequency = pair_positions[pair].size();
             heap.push({frequency, pair});
+        }
+
+        if(next_token_id == std::numeric_limits<uint16_t>::max()) {
+            break;
         }
 
         next_token_id++;

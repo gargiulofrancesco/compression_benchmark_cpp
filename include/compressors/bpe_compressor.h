@@ -5,7 +5,6 @@
 
 class BPECompressor : public Compressor<BPECompressor> {
 private:
-    static constexpr size_t MAX_TOKENS = 65535;
     static constexpr size_t FAST_ACCESS_SIZE = 16;
 
     std::vector<uint16_t> compressed_data;

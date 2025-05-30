@@ -53,7 +53,7 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
 
     // Merge pairs
     uint32_t next_token_id = 256;
-    while (next_token_id<MAX_TOKENS && !heap.empty()) {
+    while (!heap.empty()) {
         // Get the pair with the maximum (uodated) frequency
         if(heap.top().first != pair_positions[heap.top().second].size()) {
             heap.pop();
@@ -131,6 +131,10 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
             heap.push({frequency, pair});
         }
 
+        if (next_token_id == std::numeric_limits<uint16_t>::max()) {
+            break;
+        }
+        
         next_token_id++;
     }
 

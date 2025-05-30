@@ -80,6 +80,7 @@ LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vec
     robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, pair_hash> frequency;
     LongestPrefixMatcher lpm;   
     uint16_t next_token_id = 256;
+    bool full_dictionary = false;
 
     // Initialize the dictionary with single-byte tokens
     for(uint16_t i=0; i<=255; i++) {
@@ -99,11 +100,11 @@ LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vec
     std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), g);
 
     // Iterate over entries
-    for(auto index : shuffled_indices){    
+    for(auto index : shuffled_indices){ 
         size_t start = end_positions[index];
         size_t end = end_positions[index+1];
 
-        if (next_token_id == MAX_TOKENS) {
+        if (full_dictionary) {
             break; 
         }
 
@@ -118,10 +119,6 @@ LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vec
         size_t pos = start + previous_length;
 
         while (pos < end) {
-            if (next_token_id == MAX_TOKENS) {
-                break; 
-            }
-
             // Find the longest match
             auto match = lpm.find_longest_match(data + pos, end - pos);
             uint16_t match_token_id = match.value().first;
@@ -139,6 +136,12 @@ LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vec
                 frequency.erase(token_pair);
                 previous_token_id = next_token_id;
                 previous_length += match_length;
+
+                if (next_token_id == std::numeric_limits<uint16_t>::max()) {
+                    full_dictionary = true;
+                    break;
+                }
+                
                 next_token_id++;
             }
             else {
