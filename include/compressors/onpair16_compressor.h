@@ -6,7 +6,6 @@
 
 class OnPair16Compressor : public Compressor<OnPair16Compressor> {
 private:
-    static constexpr size_t THRESHOLD = 10;
     static constexpr size_t MAX_LENGTH = 16;
 
     std::vector<uint16_t> compressed_data;

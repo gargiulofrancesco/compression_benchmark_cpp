@@ -1,4 +1,5 @@
 #include "onpair16_compressor.h"
+#include "threshold.h"
 #include <cstring>
 #include <robin_hood.h>
 #include <random>
@@ -6,7 +7,7 @@
 OnPair16Compressor::OnPair16Compressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
     offsets.reserve(n_elements);
-    dictionary_data.reserve(2 * (1024 * 1024)); // 2 MB
+    dictionary_data.reserve(2 * 1024 * 1024); // 2 MiB
     dictionary_offsets.reserve(1 << 16);
 }
 
@@ -68,7 +69,7 @@ const char* OnPair16Compressor::name() const {
 LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     dictionary_offsets.push_back(0);
     
-    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, size_t, pair_hash> frequency;
+    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, uint16_t, pair_hash> frequency;
     LongestPrefixMatcher16 lpm;   
     uint16_t next_token_id = 256;
     bool full_dictionary = false;
@@ -90,6 +91,12 @@ LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std:
     std::mt19937 g(rd());
     std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), g);
 
+    // Initialize the adaptive threshold
+    size_t sample_size = static_cast<size_t>(static_cast<double>(end_positions.back()) * 0.1); // 10% of the data size
+    size_t tokens_to_insert = 65536 - 256; // 65536 total tokens, 256 already used
+    size_t update_period = static_cast<size_t>(std::ceil(65536.0 * 0.001)); // 0.1% of the dictionary size
+    Threshold threshold(sample_size, tokens_to_insert, update_period);
+
     // Iterate over entries
     for(auto index : shuffled_indices){ 
         size_t start = end_positions[index];
@@ -108,6 +115,7 @@ LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std:
         size_t previous_length = match.value().second; 
 
         size_t pos = start + previous_length;
+        threshold.update(previous_length, false);
 
         while (pos < end) {
             // Find the longest match
@@ -121,7 +129,7 @@ LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std:
                 auto token_pair = std::make_pair(previous_token_id, match_token_id);
                 frequency[token_pair]++;
 
-                if (frequency[token_pair] > THRESHOLD) {
+                if (frequency[token_pair] > threshold.get()) {
                     lpm.insert(data + pos - previous_length, previous_length + match_length, next_token_id);
                     dictionary_data.insert(dictionary_data.end(), data + pos - previous_length, data + pos + match_length);
                     dictionary_offsets.push_back(dictionary_data.size());
@@ -137,12 +145,14 @@ LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std:
                     }
 
                     next_token_id++;
+                    threshold.update(match_length, true);
                 }
             }
 
             if (!added_token) {
                 previous_token_id = match_token_id;
                 previous_length = match_length;
+                threshold.update(match_length, false);
             }
 
             pos += match_length;

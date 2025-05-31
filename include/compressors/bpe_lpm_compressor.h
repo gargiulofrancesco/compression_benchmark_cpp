@@ -7,7 +7,6 @@
 class BPELPMCompressor : public Compressor<BPELPMCompressor> {
 private:
     static constexpr size_t FAST_ACCESS_SIZE = 16;
-    static constexpr size_t SAMPLE_SIZE = 8 * 1024 * 1024;
 
     std::vector<uint16_t> compressed_data;
     std::vector<size_t> offsets;

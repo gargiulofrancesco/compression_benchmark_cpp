@@ -13,7 +13,8 @@ BPELPMCompressor::BPELPMCompressor(size_t data_size, size_t n_elements) {
 }
 
 void BPELPMCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) { 
-    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, SAMPLE_SIZE);
+    size_t sample_size = 0.1 * end_positions.back(); // 10% of the data size
+    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, sample_size);
     LongestPrefixMatcher lpm = train(sampled_data.data(), sampled_end_positions);
     parse(data, end_positions, lpm);
 }
