@@ -9,10 +9,9 @@ struct BenchmarkResult {
     std::string dataset_name;
     std::string compressor_name;
     double compression_rate;
-    double compression_speed;
-    double decompression_speed;
-    double random_access_speed;
-    double average_random_access_time;
+    double compression_speed; // in MiB/s
+    double decompression_speed; // in MiB/s
+    size_t average_random_access_time; // in nanoseconds
 };
 
 std::pair<std::vector<uint8_t>, std::vector<size_t>> load_dataset(const std::filesystem::path& path);

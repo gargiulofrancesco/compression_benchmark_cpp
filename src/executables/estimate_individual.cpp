@@ -25,8 +25,7 @@ BenchmarkResult compress_deflate(const std::string& dataset_name, const std::vec
     BenchmarkResult result;
     result.dataset_name = dataset_name;
     result.compressor_name = "deflate -" + std::to_string(compression_level);
-    result.random_access_speed = 0.0;
-    result.average_random_access_time = 0.0;
+    result.average_random_access_time = 0;
 
     // Prepare compression buffer
     std::vector<uint8_t> compressed_buffer(data.size() * 2);
@@ -86,8 +85,7 @@ BenchmarkResult compress_brotli(const std::string& dataset_name, const std::vect
     BenchmarkResult result;
     result.dataset_name = dataset_name;
     result.compressor_name = "brotli -" + std::to_string(compression_level);
-    result.random_access_speed = 0.0;
-    result.average_random_access_time = 0.0;
+    result.average_random_access_time = 0;
        
     // Prepare compression buffer
     size_t compressed_size_bound = BrotliEncoderMaxCompressedSize(data.size());
@@ -143,8 +141,7 @@ BenchmarkResult compress_zstd(const std::string& dataset_name, const std::vector
     BenchmarkResult result;
     result.dataset_name = dataset_name;
     result.compressor_name = "zstd -" + std::to_string(compression_level);
-    result.random_access_speed = 0.0;
-    result.average_random_access_time = 0.0;
+    result.average_random_access_time = 0;
 
     // Prepare compression buffer
     size_t max_dst_size = ZSTD_compressBound(data.size());
@@ -195,8 +192,7 @@ BenchmarkResult compress_lz4(const std::string& dataset_name, const std::vector<
     BenchmarkResult result;
     result.dataset_name = dataset_name;
     result.compressor_name = "lz4 -" + std::to_string(compression_level);
-    result.random_access_speed = 0.0;
-    result.average_random_access_time = 0.0;
+    result.average_random_access_time = 0;
     
     // Prepare compression buffer
     size_t max_dst_size = LZ4_compressBound(data.size());
@@ -263,8 +259,7 @@ BenchmarkResult compress_snappy(const std::string& dataset_name, const std::vect
     BenchmarkResult result;
     result.dataset_name = dataset_name;
     result.compressor_name = "snappy";
-    result.random_access_speed = 0.0;
-    result.average_random_access_time = 0.0;
+    result.average_random_access_time = 0;
     
      // Prepare compression buffer
     size_t compressed_size_bound = snappy::MaxCompressedLength(data.size());
@@ -315,8 +310,7 @@ BenchmarkResult compress_xz(const std::string& dataset_name, const std::vector<u
     BenchmarkResult result;
     result.dataset_name = dataset_name;
     result.compressor_name = "xz -" + std::to_string(compression_level);
-    result.random_access_speed = 0.0;
-    result.average_random_access_time = 0.0;
+    result.average_random_access_time = 0;
 
     // Initialize LZMA encoder
     lzma_stream strm = LZMA_STREAM_INIT;

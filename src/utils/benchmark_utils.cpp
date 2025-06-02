@@ -62,8 +62,7 @@ std::vector<BenchmarkResult> read_benchmark_results(const std::filesystem::path&
                 br.compression_rate = result["compression_rate"].get_double().value();
                 br.compression_speed = result["compression_speed"].get_double().value();
                 br.decompression_speed = result["decompression_speed"].get_double().value();
-                br.random_access_speed = result["random_access_speed"].get_double().value();
-                br.average_random_access_time = result["average_random_access_time"].get_double().value();
+                br.average_random_access_time = result["average_random_access_time"].get_uint64().value();
                 results.push_back(br);
             }
         } catch (const simdjson::simdjson_error& e) {
@@ -91,8 +90,7 @@ void append_benchmark_result(const BenchmarkResult& result, const std::filesyste
                 br.compression_rate = res["compression_rate"].get_double().value();
                 br.compression_speed = res["compression_speed"].get_double().value();
                 br.decompression_speed = res["decompression_speed"].get_double().value();
-                br.random_access_speed = res["random_access_speed"].get_double().value();
-                br.average_random_access_time = res["average_random_access_time"].get_double().value();
+                br.average_random_access_time = res["average_random_access_time"].get_uint64().value();
                 results.push_back(br);
             }
         } catch (const simdjson::simdjson_error& e) {
@@ -119,7 +117,6 @@ void append_benchmark_result(const BenchmarkResult& result, const std::filesyste
         output << "        \"compression_rate\": " << r.compression_rate << ",\n";
         output << "        \"compression_speed\": " << r.compression_speed << ",\n";
         output << "        \"decompression_speed\": " << r.decompression_speed << ",\n";
-        output << "        \"random_access_speed\": " << r.random_access_speed << ",\n";
         output << "        \"average_random_access_time\": " << r.average_random_access_time;
         output << "\n    }" << (i < results.size() - 1 ? "," : "") << "\n";
     }
@@ -141,14 +138,12 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
     for (const auto& [key, group] : grouped_results) {
         const auto& [compressor, dataset] = key;
         size_t len = group.size();
-        double avg_compression_rate = 0, avg_compression_speed = 0, avg_decompression_speed = 0,
-               avg_random_access_speed = 0, avg_average_random_access_time = 0;
+        double avg_compression_rate = 0, avg_compression_speed = 0, avg_decompression_speed = 0, avg_average_random_access_time = 0;
 
         for (const auto& result : group) {
             avg_compression_rate += result.compression_rate;
             avg_compression_speed += result.compression_speed;
             avg_decompression_speed += result.decompression_speed;
-            avg_random_access_speed += result.random_access_speed;
             avg_average_random_access_time += result.average_random_access_time;
         }
 
@@ -158,7 +153,6 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
             avg_compression_rate / len,
             avg_compression_speed / len,
             avg_decompression_speed / len,
-            avg_random_access_speed / len,
             avg_average_random_access_time / len
         };
         compressor_groups[compressor].push_back(averaged_result);
@@ -167,15 +161,12 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
     // Calculate overall averages for each compressor
     for (const auto& [compressor, results] : compressor_groups) {
         size_t len = results.size();
-        double overall_avg_compression_rate = 0, overall_avg_compression_speed = 0, 
-               overall_avg_decompression_speed = 0, overall_avg_random_access_speed = 0, 
-               overall_avg_random_access_time = 0;
+        double overall_avg_compression_rate = 0, overall_avg_compression_speed = 0, overall_avg_decompression_speed = 0, overall_avg_random_access_time = 0;
 
         for (const auto& result : results) {
             overall_avg_compression_rate += result.compression_rate;
             overall_avg_compression_speed += result.compression_speed;
             overall_avg_decompression_speed += result.decompression_speed;
-            overall_avg_random_access_speed += result.random_access_speed;
             overall_avg_random_access_time += result.average_random_access_time;
         }
 
@@ -185,7 +176,6 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
             overall_avg_compression_rate / len,
             overall_avg_compression_speed / len,
             overall_avg_decompression_speed / len,
-            overall_avg_random_access_speed / len,
             overall_avg_random_access_time / len
         };
     }
@@ -194,19 +184,17 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
     for (const auto& [compressor, results] : compressor_groups) {
         std::cout << "\nResults for Compressor: " << compressor << "\n";
         std::cout << std::setw(20) << "Dataset"
-                  << std::setw(12) << "C. Rate"
-                  << std::setw(20) << "C. Speed (MB/s)"
-                  << std::setw(20) << "D. Speed (MB/s)"
-                  << std::setw(20) << "R.A. Speed (MB/s)"
-                  << std::setw(20) << "R.A. Time (ns)" << "\n";
+                  << std::setw(12) << "Comp. Rate"
+                  << std::setw(20) << "Comp. Speed (MiB/s)"
+                  << std::setw(20) << "Decomp. Speed (MiB/s)"
+                  << std::setw(20) << "Avg. Access Time (ns)" << "\n";
 
         for (const auto& result : results) {
             std::cout << std::setw(20) << result.dataset_name
                       << std::setw(12) << std::fixed << std::setprecision(3) << result.compression_rate
                       << std::setw(20) << std::fixed << std::setprecision(2) << result.compression_speed
                       << std::setw(20) << std::fixed << std::setprecision(2) << result.decompression_speed
-                      << std::setw(20) << std::fixed << std::setprecision(2) << result.random_access_speed
-                      << std::setw(20) << std::fixed << std::setprecision(0) << (result.average_random_access_time * 1e9) << "\n";
+                      << std::setw(20) << std::fixed << std::setprecision(0) << result.average_random_access_time << "\n";
         }
 
         // Print the overall averages row
@@ -215,8 +203,7 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
                   << std::setw(12) << std::fixed << std::setprecision(3) << avg_result.compression_rate
                   << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.compression_speed
                   << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.decompression_speed
-                  << std::setw(20) << std::fixed << std::setprecision(2) << avg_result.random_access_speed
-                  << std::setw(20) << std::fixed << std::setprecision(0) << (avg_result.average_random_access_time * 1e9) << "\n";
+                  << std::setw(20) << std::fixed << std::setprecision(0) << avg_result.average_random_access_time << "\n";
     }
 }
 

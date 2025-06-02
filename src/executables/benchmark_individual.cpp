@@ -5,7 +5,7 @@
 #include <chrono>
 #include <sched.h>
 #include <stdexcept>
-#include "copy_compressor.h"
+#include "raw_compressor.h"
 #include "fsst_compressor.h"
 #include "fsst_block_compressor.h"
 #include "lz4_compressor.h"
@@ -34,10 +34,6 @@ BenchmarkResult benchmark(CompressorType& compressor,
 
     // Calculate the total size of random access data
     const double data_bytes = static_cast<double>(data.size());
-    size_t random_access_bytes = 0;
-    for (size_t i : queries) {
-        random_access_bytes += end_positions[i+1] - end_positions[i];
-    }
 
     // Initialize benchmark result
     BenchmarkResult result;
@@ -65,7 +61,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
     result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
 
     // Random Access
-    double total_random_access_time = 0.0;
+    size_t total_random_access_time = 0;
     for (size_t query : queries) {
         size_t start_position = end_positions[query];
         size_t end_position = end_positions[query+1];
@@ -78,11 +74,10 @@ BenchmarkResult benchmark(CompressorType& compressor,
         if (!std::equal(data.data() + start_position, data.data() + end_position, buffer.data())) {
             throw std::runtime_error("Data mismatch during random access for compressor: " + std::string(compressor.name()));
         }
-        double random_access_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_random_access - start_random_access).count();
+        size_t random_access_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end_random_access - start_random_access).count();
         total_random_access_time += random_access_time;
     }
 
-    result.random_access_speed = (static_cast<double>(random_access_bytes) / (1024.0 * 1024.0)) / total_random_access_time;
     result.average_random_access_time = total_random_access_time / queries.size();
 
     return result;
@@ -121,8 +116,8 @@ int main(int argc, char* argv[]) {
 
         // Initialize the compressor
         BenchmarkResult result;
-        if (compressor_name == "copy") {
-            CopyCompressor compressor = CopyCompressor::create(data.size(), end_positions.size()-1);
+        if (compressor_name == "raw") {
+            RawCompressor compressor = RawCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "lz4") {

@@ -1,15 +1,15 @@
-#ifndef COPY_COMPRESSOR_H
-#define COPY_COMPRESSOR_H
+#ifndef RAW_COMPRESSOR_H
+#define RAW_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
 
-class CopyCompressor : public Compressor<CopyCompressor> {
+class RawCompressor : public Compressor<RawCompressor> {
 private:
     std::vector<uint8_t> compressed_data;
     std::vector<size_t> offsets;
 
 public:
-    CopyCompressor(size_t data_size, size_t n_elements);
+    RawCompressor(size_t data_size, size_t n_elements);
 
     // Derived class method implementations
     void compress(const uint8_t* data, const std::vector<size_t>& end_positions);
@@ -19,4 +19,4 @@ public:
     const char* name() const;
 };
 
-#endif // COPY_COMPRESSOR_H
+#endif // RAW_COMPRESSOR_H
