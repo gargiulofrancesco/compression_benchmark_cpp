@@ -17,7 +17,7 @@ private:
 
 public:
     Threshold(size_t target_sample_size, size_t tokens_to_insert, size_t update_period)
-        : threshold(0),
+        : threshold(1),
           target_sample_size(target_sample_size),
           current_sample_size(0),
           tokens_to_insert(tokens_to_insert),
@@ -46,7 +46,7 @@ public:
                 size_t predicted_sample_size = current_sample_size + predicted_missing_bytes;
 
                 if (predicted_sample_size > target_sample_size) {
-                    threshold = (threshold > 0) ? threshold - 1 : 0;
+                    threshold = (threshold > 1) ? threshold - 1 : 1;
                 } else if (predicted_sample_size < target_sample_size) {
                     threshold = (threshold < UINT16_MAX - 1) ? threshold + 1 : UINT16_MAX - 1;
                 }
