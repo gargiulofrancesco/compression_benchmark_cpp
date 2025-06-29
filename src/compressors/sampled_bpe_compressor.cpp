@@ -5,6 +5,8 @@
 #include "pair_hash.h"
 #include "bitvector.h"
 
+using Pair = std::pair<uint16_t, uint16_t>;
+
 SampledBPECompressor::SampledBPECompressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
     offsets.reserve(n_elements);
@@ -13,7 +15,7 @@ SampledBPECompressor::SampledBPECompressor(size_t data_size, size_t n_elements) 
 }
 
 void SampledBPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) { 
-    size_t sample_size = 0.1 * end_positions.back(); // 10% of the data size
+    size_t sample_size = SAMPLE_SIZE_PERCENTAGE * end_positions.back();
     auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, sample_size);
     LongestPrefixMatcher lpm = train(sampled_data.data(), sampled_end_positions);
     parse(data, end_positions, lpm);
@@ -96,13 +98,13 @@ LongestPrefixMatcher SampledBPECompressor::train(const uint8_t* data, const std:
     }
 
     // The bitvector inidicates with zeroes the positions of merged bytes
-    BitVector bit_vector = BitVector::with_ones(end_positions.back());
+    BitVector bv = BitVector::with_ones(end_positions.back());
     
-    // Strings end positions are used to avoid merging pairs that cross multiple strings
+    // Strings end positions are used to avoid merging pairs across different strings
     robin_hood::unordered_set<size_t> end_positions_set(end_positions.begin() + 1, end_positions.end());
 
     // Initialize pair positions    
-    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, robin_hood::unordered_set<size_t>, pair_hash> pair_positions;
+    robin_hood::unordered_map<Pair, robin_hood::unordered_set<size_t>, pair_hash> pair_pos;
     for (size_t i=0; i<end_positions.back()-1; i++) {
         if(end_positions_set.contains(i+1)) {
             continue;
@@ -110,32 +112,41 @@ LongestPrefixMatcher SampledBPECompressor::train(const uint8_t* data, const std:
 
         uint16_t t1 = token_ids[i];
         uint16_t t2 = token_ids[i+1];
-        pair_positions[{t1, t2}].insert(i);
+        pair_pos[{t1, t2}].insert(i);
     }
 
     // Initialize heap tracking the most frequent pairs
-    std::priority_queue<std::pair<size_t, std::pair<uint16_t, uint16_t>>> heap;
-    for (const auto& pair : pair_positions) {
-        size_t frequency = pair.second.size();
-        heap.push({frequency, pair.first});
+    std::priority_queue<std::pair<size_t, Pair>> top_pairs;
+    for (const auto& pair : pair_pos) {
+        size_t freq = pair.second.size();
+        top_pairs.push({freq, pair.first});
     }
 
     // Merge pairs
     uint32_t next_token_id = 256;
-    while (!heap.empty()) {
-        // Get the pair with the maximum (updated) frequency
-        if(heap.top().first != pair_positions[heap.top().second].size()) {
-            heap.pop();
+    while (!top_pairs.empty()) {
+        // Get the most frequent pair
+        auto top = top_pairs.top();
+        auto freq = top.first;
+        auto [t1, t2] = top.second;
+        top_pairs.pop();
+
+        // Check if the frequency is up-to-date
+        auto current_freq = pair_pos[{t1, t2}].size();
+        if (freq != current_freq) {
+            top_pairs.push({current_freq, {t1, t2}});
             continue;
         }
 
-        auto [t1, t2] = heap.top().second;
-        heap.pop();
+        // Stop if the most frequent pair has frequency 0
+        if (current_freq == 0) {
+            break;
+        }
 
         // Get the positions of the pair
-        std::vector<size_t> positions(pair_positions[{t1, t2}].begin(), pair_positions[{t1, t2}].end());
+        std::vector<size_t> positions(pair_pos[{t1, t2}].begin(), pair_pos[{t1, t2}].end());
         std::sort(positions.begin(), positions.end());
-        pair_positions.erase({t1, t2});
+        pair_pos.erase({t1, t2});
 
         // Add the new token to the dictionary
         auto t1_start = dictionary_offsets[t1];
@@ -149,32 +160,32 @@ LongestPrefixMatcher SampledBPECompressor::train(const uint8_t* data, const std:
         dictionary_offsets.push_back(dictionary_data.size());
         lpm.insert(merged_token.data(), merged_token.size(), next_token_id);
 
-        // Store updated pairs to minimize insertions in the heap
-        robin_hood::unordered_set<std::pair<uint16_t, uint16_t>, pair_hash> updated_pairs_set;
+        // Keep track of new pairs that will form after merging
+        robin_hood::unordered_set<Pair, pair_hash> new_pairs;
 
-        // Update occurrences of (t1, t2)
+        // Update occurrences of the top pair
         for(size_t pos : positions) {
             // If position was already merged, skip
-            if (!bit_vector.get(pos).value()) {
+            if (!bv.get(pos).value()) {
                 continue;
             }
 
+            // We indicate with t0 and t3 the tokens before and after the top pair
             auto t1_pos = pos;
-            auto t2_pos = bit_vector.next_one(t1_pos).value();
-            auto t0_pos = bit_vector.prev_one(t1_pos);
-            auto t3_pos = bit_vector.next_one(t2_pos);
+            auto t2_pos = bv.next_one(t1_pos).value();
+            auto t0_pos = bv.prev_one(t1_pos); // t0_pos is None if t1 is the first token
+            auto t3_pos = bv.next_one(t2_pos); // t3_pos is None if t2 is the last token
 
             // Update (t0, t1) and (t0, next_id)     
             if (t0_pos.has_value() && !end_positions_set.contains(t1_pos)) {
                 auto t0 = token_ids[t0_pos.value()];
                 // Update (t0, t1)
                 if (t0!=t1 || t1!=t2) {
-                    pair_positions[{t0, t1}].erase(t0_pos.value());
-                    updated_pairs_set.insert({t0, t1});
+                    pair_pos[{t0, t1}].erase(t0_pos.value());
                 }
                 // Update (t0, next_id)
-                pair_positions[{t0, next_token_id}].insert(t0_pos.value());
-                updated_pairs_set.insert({t0, next_token_id});
+                pair_pos[{t0, next_token_id}].insert(t0_pos.value());
+                new_pairs.insert({t0, next_token_id});
             }
 
             // Update (t2, t3) and (next_id, t3)
@@ -182,27 +193,29 @@ LongestPrefixMatcher SampledBPECompressor::train(const uint8_t* data, const std:
                 auto t3 = token_ids[t3_pos.value()];
                 // Update (t2, t3)
                 if(t2!=t1 || t3!=t2) {
-                    pair_positions[{t2, t3}].erase(t2_pos);
-                    updated_pairs_set.insert({t2, t3});
+                    pair_pos[{t2, t3}].erase(t2_pos);
                 }
                 // Update (next_id, t3)
-                pair_positions[{next_token_id, t3}].insert(t1_pos);
-                updated_pairs_set.insert({next_token_id, t3});
+                pair_pos[{next_token_id, t3}].insert(t1_pos);
+                new_pairs.insert({next_token_id, t3});
             }
 
             // set t2_pos to 0 to merge t1 and t2
-            bit_vector.set(t2_pos, false);
+            bv.set(t2_pos, false);
 
             // Update token_ids
             token_ids[t1_pos] = next_token_id;
         }
 
-        // Update the heap
-        for (const auto& pair : updated_pairs_set) {
-            auto frequency = pair_positions[pair].size();
-            heap.push({frequency, pair});
+        // Update the top_pairs heap with new pairs.
+        // We don't need to update old pairs because they are already in the heap and their frequency can only decrease; 
+        // the check at the beginning of the merge loop ensures we operate with up-to-date frequencies.
+        for (const auto& pair : new_pairs) {
+            auto freq = pair_pos[pair].size();
+            top_pairs.push({freq, pair});
         }
 
+        // If the dictionary is full, stop merging
         if(next_token_id == std::numeric_limits<uint16_t>::max()) {
             break;
         }

@@ -7,6 +7,7 @@
 class SampledBPECompressor : public Compressor<SampledBPECompressor> {
 private:
     static constexpr size_t FAST_ACCESS_SIZE = 16;
+    static constexpr float SAMPLE_SIZE_PERCENTAGE = 0.1; // 10% of the data size
 
     std::vector<uint16_t> compressed_data;
     std::vector<size_t> offsets;
