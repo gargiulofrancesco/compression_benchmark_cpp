@@ -1,10 +1,10 @@
-#ifndef BPE_LPM_COMPRESSOR_H
-#define BPE_LPM_COMPRESSOR_H
+#ifndef SAMPLED_BPE_COMPRESSOR_H
+#define SAMPLED_BPE_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
 #include "lpm.h"
 
-class BPELPMCompressor : public Compressor<BPELPMCompressor> {
+class SampledBPECompressor : public Compressor<SampledBPECompressor> {
 private:
     static constexpr size_t FAST_ACCESS_SIZE = 16;
 
@@ -18,7 +18,7 @@ private:
     std::pair<std::vector<uint8_t>, std::vector<size_t>> sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size);
 
 public:
-BPELPMCompressor(size_t data_size, size_t n_elements);
+SampledBPECompressor(size_t data_size, size_t n_elements);
 
     // Derived class method implementations
     void compress(const uint8_t* data, const std::vector<size_t>& end_positions);
@@ -28,4 +28,4 @@ BPELPMCompressor(size_t data_size, size_t n_elements);
     const char* name() const;
 };
 
-#endif // BPE_LPM_COMPRESSOR_H
+#endif // SAMPLED_BPE_COMPRESSOR_H
