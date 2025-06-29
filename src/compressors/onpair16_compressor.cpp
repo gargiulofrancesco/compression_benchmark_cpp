@@ -90,6 +90,10 @@ LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std:
     std::mt19937 g(rd());
     std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), g);
 
+    // Set the threshold for merging tokens
+    double data_size_mib = static_cast<double>(end_positions.back()) / (1024.0 * 1024.0);
+    size_t threshold = static_cast<size_t>(std::fmax(std::log2(data_size_mib), 2.0));
+
     // Iterate over entries
     for(auto index : shuffled_indices){ 
         size_t start = end_positions[index];
@@ -121,7 +125,7 @@ LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std:
                 auto token_pair = std::make_pair(previous_token_id, match_token_id);
                 frequency[token_pair]++;
 
-                if (frequency[token_pair] >= THRESHOLD) {
+                if (frequency[token_pair] >= threshold) {
                     lpm.insert(data + pos - previous_length, previous_length + match_length, next_token_id);
                     dictionary_data.insert(dictionary_data.end(), data + pos - previous_length, data + pos + match_length);
                     dictionary_offsets.push_back(dictionary_data.size());

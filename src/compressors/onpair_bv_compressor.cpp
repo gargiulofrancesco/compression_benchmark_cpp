@@ -1,28 +1,32 @@
-#include "onpair_compressor.h"
+#include "onpair_bv_compressor.h"
 #include <cstring>
 #include <robin_hood.h>
 #include <random>
 #include <queue>
+#include <iostream>
 
-OnPairCompressor::OnPairCompressor(size_t data_size, size_t n_elements) {
-    compressed_data.reserve(data_size);
+OnPairBVCompressor::OnPairBVCompressor(size_t data_size, size_t n_elements) {
+    compressed_data.with_capacity(data_size * BITS_PER_TOKEN);
     offsets.reserve(n_elements);
     dictionary_data.reserve(2 * 1024 * 1024); // 2 MiB
     dictionary_offsets.reserve(1 << 16);
 }
 
-void OnPairCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    LongestPrefixMatcher<uint16_t> lpm = train(data, end_positions);
+void OnPairBVCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
+    LongestPrefixMatcher<uint32_t> lpm = train(data, end_positions);
     parse(data, end_positions, lpm);
 }
 
 // Assumes buffer has enough space to store the decompressed data
-size_t OnPairCompressor::decompress(uint8_t* buffer) const {
+size_t OnPairBVCompressor::decompress(uint8_t* buffer) const {
     const uint8_t* dict_ptr = dictionary_data.data();
     const uint32_t* offsets_ptr = dictionary_offsets.data();
     size_t size = 0;
 
-    for (uint16_t token_id : compressed_data) {
+    for(size_t i=0; i < compressed_data.len() / BITS_PER_TOKEN; i++) {
+        size_t offset = i * BITS_PER_TOKEN;
+        uint32_t token_id = compressed_data.get_bits(offset, BITS_PER_TOKEN).value();
+
         size_t dict_start = offsets_ptr[token_id];
         size_t dict_end = offsets_ptr[token_id + 1];
         size_t length = dict_end - dict_start;
@@ -39,16 +43,17 @@ size_t OnPairCompressor::decompress(uint8_t* buffer) const {
 }
 
 // Assumes buffer has enough space to store the decompressed data
-size_t OnPairCompressor::get_item_at(size_t index, uint8_t* buffer) const {
+size_t OnPairBVCompressor::get_item_at(size_t index, uint8_t* buffer) const {
+    size_t item_start = offsets[index];
+    size_t item_end = offsets[index + 1];
+
     const uint8_t* dict_ptr = dictionary_data.data();
     const uint32_t* offsets_ptr = dictionary_offsets.data();
     size_t size = 0;
 
-    size_t data_start = offsets[index];
-    size_t data_end = offsets[index + 1];
-
-    for (size_t i = data_start; i < data_end; i++) {
-        uint16_t token_id = compressed_data[i];
+    for (size_t i = item_start; i < item_end; i++) {
+        size_t offset = i * BITS_PER_TOKEN;
+        uint32_t token_id = compressed_data.get_bits(offset, BITS_PER_TOKEN).value();
 
         size_t dict_start = offsets_ptr[token_id];
         size_t dict_end = offsets_ptr[token_id + 1];
@@ -66,24 +71,24 @@ size_t OnPairCompressor::get_item_at(size_t index, uint8_t* buffer) const {
     return size;
 }
 
-size_t OnPairCompressor::space_used_bytes() const {
-    return compressed_data.size() * sizeof(uint16_t) + dictionary_data.size() + dictionary_offsets.size() * sizeof(uint32_t);
+size_t OnPairBVCompressor::space_used_bytes() const {
+    return (compressed_data.len() / 8) + dictionary_data.size() + dictionary_offsets.size() * sizeof(uint32_t);
 }
 
-const char* OnPairCompressor::name() const {
-    return "OnPair";
+const char* OnPairBVCompressor::name() const {
+    return "OnPair BV";
 }
 
-LongestPrefixMatcher<uint16_t> OnPairCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
+LongestPrefixMatcher<uint32_t> OnPairBVCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     dictionary_offsets.push_back(0);
     
-    robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, uint16_t, pair_hash> frequency;
-    LongestPrefixMatcher<uint16_t> lpm;
-    uint16_t next_token_id = 256;
+    robin_hood::unordered_map<std::pair<uint32_t, uint32_t>, uint16_t, pair_hash> frequency;
+    LongestPrefixMatcher<uint32_t> lpm;
+    uint32_t next_token_id = 256;
     bool full_dictionary = false;
 
     // Initialize the dictionary with single-byte tokens
-    for(uint16_t i=0; i<=255; i++) {
+    for(uint32_t i=0; i<=255; i++) {
         uint8_t value = static_cast<uint8_t>(i);
         lpm.insert(&value, 1, i);
         dictionary_data.push_back(value);
@@ -117,7 +122,7 @@ LongestPrefixMatcher<uint16_t> OnPairCompressor::train(const uint8_t* data, cons
         }
 
         auto match = lpm.find_longest_match(data + start, end - start);
-        uint16_t previous_token_id = match.value().first;
+        uint32_t previous_token_id = match.value().first;
         size_t previous_length = match.value().second; 
 
         size_t pos = start + previous_length;
@@ -125,7 +130,7 @@ LongestPrefixMatcher<uint16_t> OnPairCompressor::train(const uint8_t* data, cons
         while (pos < end) {
             // Find the longest match
             auto match = lpm.find_longest_match(data + pos, end - pos);
-            uint16_t match_token_id = match.value().first;
+            uint32_t match_token_id = match.value().first;
             size_t match_length = match.value().second; 
 
             // Update token frequency and possibly merge tokens
@@ -141,7 +146,7 @@ LongestPrefixMatcher<uint16_t> OnPairCompressor::train(const uint8_t* data, cons
                 previous_token_id = next_token_id;
                 previous_length += match_length;
 
-                if (next_token_id == std::numeric_limits<uint16_t>::max()) {
+                if (next_token_id == MAX_TOKEN_ID) {
                     full_dictionary = true;
                     break;
                 }
@@ -160,7 +165,7 @@ LongestPrefixMatcher<uint16_t> OnPairCompressor::train(const uint8_t* data, cons
     return std::move(lpm);
 }
 
-void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm) {
+void OnPairBVCompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint32_t>& lpm) {
     offsets.push_back(0);
 
     for(int i=0; i<end_positions.size()-1; i++) {
@@ -168,7 +173,7 @@ void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end
         size_t end = end_positions[i+1];
 
         if (start == end) {
-            offsets.push_back(compressed_data.size());
+            offsets.push_back(compressed_data.len() / BITS_PER_TOKEN);
             continue;
         }
 
@@ -176,12 +181,12 @@ void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end
         while (pos < end) {
             // Find the longest match
             auto match = lpm.find_longest_match(data + pos, end - pos);
-            uint16_t token_id = match->first;
+            uint32_t token_id = match->first;
             size_t length = match->second;
-            compressed_data.push_back(token_id);
+            compressed_data.append_bits(token_id, BITS_PER_TOKEN);
             pos += length;
         }
 
-        offsets.push_back(compressed_data.size());
+        offsets.push_back(compressed_data.len() / BITS_PER_TOKEN);
     }
 }

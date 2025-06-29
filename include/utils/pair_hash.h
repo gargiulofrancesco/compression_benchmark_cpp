@@ -11,6 +11,11 @@ struct pair_hash {
         return robin_hood::hash<uint32_t>{}((static_cast<uint32_t>(p.first) << 16) | p.second);
     }
 
+    // For pair<uint32_t, uint32_t>
+    size_t operator()(const std::pair<uint32_t, uint32_t>& p) const noexcept {
+        return robin_hood::hash<uint64_t>{}((static_cast<uint64_t>(p.first) << 32) | p.second);
+    }
+
     // For pair<uint64_t, uint8_t>
     size_t operator()(const std::pair<uint64_t, uint8_t>& p) const noexcept {
         return robin_hood::hash<uint64_t>{}(p.first) ^ robin_hood::hash<uint8_t>{}(p.second);
