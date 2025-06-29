@@ -12,7 +12,7 @@ OnPairCompressor::OnPairCompressor(size_t data_size, size_t n_elements) {
 }
 
 void OnPairCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    LongestPrefixMatcher lpm = train(data, end_positions);
+    LongestPrefixMatcher<uint16_t> lpm = train(data, end_positions);
     parse(data, end_positions, lpm);
 }
 
@@ -74,11 +74,11 @@ const char* OnPairCompressor::name() const {
     return "OnPair";
 }
 
-LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
+LongestPrefixMatcher<uint16_t> OnPairCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     dictionary_offsets.push_back(0);
     
     robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, uint16_t, pair_hash> frequency;
-    LongestPrefixMatcher lpm;   
+    LongestPrefixMatcher<uint16_t> lpm;
     uint16_t next_token_id = 256;
     bool full_dictionary = false;
 
@@ -156,7 +156,7 @@ LongestPrefixMatcher OnPairCompressor::train(const uint8_t* data, const std::vec
     return std::move(lpm);
 }
 
-void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm) {
+void OnPairCompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm) {
     offsets.push_back(0);
 
     for(int i=0; i<end_positions.size()-1; i++) {

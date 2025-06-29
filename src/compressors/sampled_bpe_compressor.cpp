@@ -17,7 +17,7 @@ SampledBPECompressor::SampledBPECompressor(size_t data_size, size_t n_elements) 
 void SampledBPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) { 
     size_t sample_size = SAMPLE_SIZE_PERCENTAGE * end_positions.back();
     auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, sample_size);
-    LongestPrefixMatcher lpm = train(sampled_data.data(), sampled_end_positions);
+    LongestPrefixMatcher<uint16_t> lpm = train(sampled_data.data(), sampled_end_positions);
     parse(data, end_positions, lpm);
 }
 
@@ -79,9 +79,9 @@ const char* SampledBPECompressor::name() const {
     return "Sampled BPE";
 }
 
-LongestPrefixMatcher SampledBPECompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
-    LongestPrefixMatcher lpm;
-    
+LongestPrefixMatcher<uint16_t> SampledBPECompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
+    LongestPrefixMatcher<uint16_t> lpm;
+
     // Initialize the dictionary with single-byte tokens
     dictionary_offsets.push_back(0);
     for(uint16_t i=0; i<=255; i++) {
@@ -226,7 +226,7 @@ LongestPrefixMatcher SampledBPECompressor::train(const uint8_t* data, const std:
     return std::move(lpm);
 }
 
-void SampledBPECompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm) {
+void SampledBPECompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm) {
     offsets.push_back(0);
 
     for(int i=0; i<end_positions.size()-1; i++) {

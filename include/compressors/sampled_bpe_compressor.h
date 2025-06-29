@@ -14,8 +14,8 @@ private:
     std::vector<uint8_t> dictionary_data;
     std::vector<uint32_t> dictionary_offsets;
 
-    LongestPrefixMatcher train(const uint8_t* data, const std::vector<size_t>& end_positions);
-    void parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher& lpm);
+    LongestPrefixMatcher<uint16_t> train(const uint8_t* data, const std::vector<size_t>& end_positions);
+    void parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm);
     std::pair<std::vector<uint8_t>, std::vector<size_t>> sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size);
 
 public:

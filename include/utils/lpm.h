@@ -11,6 +11,7 @@
 #include <robin_hood.h>
 #include "pair_hash.h"
 
+template<typename V>
 class LongestPrefixMatcher {
 private:
     static constexpr uint64_t MASKS[] = {
@@ -27,8 +28,8 @@ private:
 
     static constexpr size_t MIN_MATCH = 8;
 
-    robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, uint16_t, pair_hash> short_match_lookup;
-    robin_hood::unordered_map<uint64_t, std::vector<uint16_t>> long_match_buckets;
+    robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, V, pair_hash> short_match_lookup;
+    robin_hood::unordered_map<uint64_t, std::vector<V>> long_match_buckets;
     std::vector<uint8_t> dictionary;
     std::vector<uint32_t> end_positions;
 
@@ -43,7 +44,7 @@ public:
         end_positions.push_back(0);
     };
 
-    inline void insert(const uint8_t* data, size_t length, uint16_t id) {
+    inline void insert(const uint8_t* data, size_t length, V id) {
         if (length > MIN_MATCH) {
             uint64_t prefix = bytes_to_u64_le(data, MIN_MATCH);
             dictionary.insert(dictionary.end(), data + MIN_MATCH, data + length);
@@ -52,7 +53,7 @@ public:
             auto& bucket = long_match_buckets[prefix];
             bucket.push_back(id);
 
-            std::sort(bucket.begin(), bucket.end(), [&](uint16_t id1, uint16_t id2) {
+            std::sort(bucket.begin(), bucket.end(), [&](V id1, V id2) {
                 size_t len1 = end_positions[id1 + 1] - end_positions[id1];
                 size_t len2 = end_positions[id2 + 1] - end_positions[id2];
                 return len2 < len1;  // descending by length
@@ -64,12 +65,12 @@ public:
         }
     }
 
-    std::optional<std::pair<uint16_t, size_t>> find_longest_match(const uint8_t* data, size_t length) const {
+    std::optional<std::pair<V, size_t>> find_longest_match(const uint8_t* data, size_t length) const {
         if (length > MIN_MATCH) {
             uint64_t prefix = bytes_to_u64_le(data, MIN_MATCH);
             auto it = long_match_buckets.find(prefix);
             if (it != long_match_buckets.end()) {
-                for (uint16_t id : it->second) {
+                for (auto id : it->second) {
                     uint32_t start = end_positions[id];
                     uint32_t end = end_positions[id + 1];
                     size_t suffix_len = end - start;
