@@ -25,6 +25,8 @@ private:
         0xFFFFFFFFFFFFFFFFULL  // 8 bytes
     };
 
+    static constexpr size_t MAX_BUCKET_SIZE = 128;
+
     robin_hood::unordered_map<std::pair<uint64_t, uint8_t>, uint16_t, pair_hash> dictionary;
     robin_hood::unordered_map<uint64_t, std::vector<std::tuple<uint64_t, uint8_t, uint16_t>>> buckets;
 
@@ -44,16 +46,22 @@ private:
 public:
     LongestPrefixMatcher16() = default;
 
-    inline void insert(const uint8_t* data, size_t length, uint16_t id) {
+    inline bool insert(const uint8_t* data, size_t length, uint16_t id) {
         if (length <= 8) {
             uint64_t value = bytes_to_u64_le(data, length);
             dictionary.emplace(std::make_pair(value, static_cast<uint8_t>(length)), id);
+            return true;
         } else {
             uint64_t prefix = bytes_to_u64_le(data, 8);
+            auto& bucket = buckets[prefix];
+
+            if (bucket.size() >= MAX_BUCKET_SIZE) {
+                return false;
+            }
+
             size_t suffix_len = length - 8;
             uint64_t suffix = bytes_to_u64_le(data + 8, suffix_len);
             
-            auto& bucket = buckets[prefix];
             bucket.emplace_back(suffix, static_cast<uint8_t>(suffix_len), id);
             
             // Sort by suffix length in descending order
@@ -61,6 +69,8 @@ public:
                 [](const auto& a, const auto& b) {
                     return std::get<1>(b) < std::get<1>(a);
                 });
+
+            return true;
         }
     }
 

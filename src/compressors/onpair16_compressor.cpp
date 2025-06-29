@@ -126,21 +126,22 @@ LongestPrefixMatcher16 OnPair16Compressor::train(const uint8_t* data, const std:
                 frequency[token_pair]++;
 
                 if (frequency[token_pair] >= threshold) {
-                    lpm.insert(data + pos - previous_length, previous_length + match_length, next_token_id);
-                    dictionary_data.insert(dictionary_data.end(), data + pos - previous_length, data + pos + match_length);
-                    dictionary_offsets.push_back(dictionary_data.size());
-                    
-                    frequency.erase(token_pair);
-                    previous_token_id = next_token_id;
-                    previous_length += match_length;
-                    added_token = true;
+                    added_token = lpm.insert(data + pos - previous_length, previous_length + match_length, next_token_id);
+                    if(added_token) {
+                        dictionary_data.insert(dictionary_data.end(), data + pos - previous_length, data + pos + match_length);
+                        dictionary_offsets.push_back(dictionary_data.size());
+                        
+                        frequency.erase(token_pair);
+                        previous_token_id = next_token_id;
+                        previous_length += match_length;
 
-                    if (next_token_id == std::numeric_limits<uint16_t>::max()) {
-                        full_dictionary = true;
-                        break;
+                        if (next_token_id == std::numeric_limits<uint16_t>::max()) {
+                            full_dictionary = true;
+                            break;
+                        }
+
+                        next_token_id++;
                     }
-
-                    next_token_id++;
                 }
             }
 
