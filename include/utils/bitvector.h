@@ -98,13 +98,13 @@ class BitVector {
             return bv;
         }
 
-        void extend_with_zeroes(size_t n) {
+        inline void extend_with_zeroes(size_t n) {
             position += n;
             size_t new_size = (position + 63) / 64;
             data.resize(new_size, 0);
         }
 
-        void extend_with_ones(size_t n) {
+        inline void extend_with_ones(size_t n) {
             position += n;
             size_t new_size = (position + 63) / 64;
             size_t old_size = data.size();
@@ -115,7 +115,7 @@ class BitVector {
             }
         }
 
-        void push(bool bit) {
+        inline void push(bool bit) {
             size_t pos_in_word = position % 64;
             if (pos_in_word == 0)
                 data.push_back(0);
@@ -126,7 +126,7 @@ class BitVector {
             position++;
         }
 
-        std::optional<bool> get(size_t index) const {
+        inline std::optional<bool> get(size_t index) const {
             if (index >= position)
                 return std::nullopt;
 
@@ -135,14 +135,14 @@ class BitVector {
             return (data[word] >> pos) & 1;
         }
 
-        void set(size_t index, bool bit) {
+        inline void set(size_t index, bool bit) {
             size_t word = index >> 6;
             size_t pos = index & 63;
             data[word] &= ~(1ULL << pos);
             data[word] |= (static_cast<uint64_t>(bit) << pos);
         }
 
-        void append_bits(uint64_t bits, size_t len) {
+        inline void append_bits(uint64_t bits, size_t len) {
             assert(len <= 64);
             assert(len == 64 || (bits >> len) == 0);
 
@@ -161,7 +161,7 @@ class BitVector {
             }
         }
 
-        std::optional<uint64_t> get_bits(size_t index, size_t len) const {
+        inline std::optional<uint64_t> get_bits(size_t index, size_t len) const {
             if (len > 64 || index + len > position)
                 return std::nullopt;
 
@@ -179,7 +179,7 @@ class BitVector {
                 return ((data[block] >> shift) | (data[block + 1] << (64 - shift))) & mask;
         }
 
-        std::optional<size_t> next_one(size_t pos) const {
+        inline std::optional<size_t> next_one(size_t pos) const {
             size_t next_pos = pos + 1;
             size_t word_pos = next_pos >> 6;
             if (word_pos >= data.size()) return std::nullopt;
@@ -196,7 +196,7 @@ class BitVector {
             return next_pos + __builtin_ctzll(buffer);
         }
 
-        std::optional<size_t> prev_one(size_t pos) const {
+        inline std::optional<size_t> prev_one(size_t pos) const {
             if (pos == 0) return std::nullopt;
 
             size_t prev_pos = pos - 1;

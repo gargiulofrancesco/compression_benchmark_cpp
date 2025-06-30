@@ -3,7 +3,6 @@
 #include <robin_hood.h>
 #include <random>
 #include <queue>
-#include <iostream>
 
 OnPairBVCompressor::OnPairBVCompressor(size_t data_size, size_t n_elements) {
     compressed_data.with_capacity(data_size * BITS_PER_TOKEN);
