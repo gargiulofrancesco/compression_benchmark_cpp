@@ -11,6 +11,8 @@ OnPair is a field-level compression algorithm designed for workloads requiring f
 
 OnPair16 is a variant that limits dictionary entries to a maximum length of 16 bytes. This constraint enables further optimizations in both longest prefix matching and decoding.
 
+**Note**: The optimized static longest prefix matching for OnPair16 is currently available only in the [Rust implementation](https://github.com/gargiulofrancesco/compression_benchmark_rs).
+
 ## Quick Start
 
 ### Installation

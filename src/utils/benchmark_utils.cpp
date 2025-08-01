@@ -29,6 +29,7 @@ std::pair<std::vector<uint8_t>, std::vector<size_t>> load_dataset(const std::fil
     std::vector<uint8_t> data;
     std::vector<size_t> end_positions;
 
+    // Start with 0, then append cumulative string lengths for boundary indexing
     end_positions.push_back(0);
     for (const auto& str : strings) {
         data.insert(data.end(), str.begin(), str.end());

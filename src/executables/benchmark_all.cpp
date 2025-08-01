@@ -1,13 +1,15 @@
-//! Comprehensive benchmark for string compression algorithms
-//! 
-//! This binary orchestrates systematic evaluation of compression algorithms for
-//! string collections with random access requirements. The benchmark suite measures:
-//! - Compression ratio and throughput
-//! - Decompression throughput  
-//! - Random access latency
-//!
-//! Each algorithm is evaluated across N_ITERATIONS runs for statistical significance.
-//! Results are aggregated and persisted in JSON format for further analysis.
+/**
+ * Comprehensive benchmark for string compression algorithms
+ *
+ * This binary orchestrates systematic evaluation of compression algorithms for
+ * string collections with random access requirements. The benchmark suite measures:
+ * - Compression ratio and throughput
+ * - Decompression throughput  
+ * - Random access latency
+ *
+ * Each algorithm is evaluated across N_ITERATIONS runs for statistical significance.
+ * Results are aggregated and persisted in JSON format for further analysis.
+ */
 
 #include <iostream>
 #include <fstream>
@@ -18,20 +20,22 @@
 #include <optional>
 #include "benchmark_utils.h"
 
-/// Compression algorithms under evaluation
+// Compression algorithms under evaluation
 const std::vector<std::string> COMPRESSORS = {"raw", "onpair", "onpair16"};
-/// Path to individual benchmark executable
+// Path to individual benchmark executable
 const std::string BENCHMARK_PATH = "./benchmark_individual";
-/// Output file for aggregated benchmark results
+// Output file for aggregated benchmark results
 const std::string OUTPUT_FILE = "benchmark_results.json";
-/// Number of iterations per algorithm-dataset combination for statistical robustness
+// Number of iterations per algorithm-dataset combination for statistical robustness
 const size_t N_ITERATIONS = 15;
 
-/// Main benchmark orchestrator
-/// 
-/// Executes comprehensive evaluation of compression algorithms across all JSON datasets
-/// in the specified directory. For each dataset-algorithm pair, performs N_ITERATIONS
-/// independent measurements to ensure statistical significance.
+/**
+ * Main benchmark orchestrator
+ * 
+ * Executes comprehensive evaluation of compression algorithms across all JSON datasets
+ * in the specified directory. For each dataset-algorithm pair, performs N_ITERATIONS
+ * independent measurements to ensure statistical significance.
+ */
 int main(int argc, char* argv[]) {
     // Parse command-line arguments: dataset directory and optional CPU core ID
     if (argc < 2) {

@@ -1,13 +1,15 @@
-//! Individual benchmark executor for compression algorithm evaluation
-//!
-//! This binary performs isolated performance measurement of a single compression algorithm
-//! on a single dataset. Metrics collected include:
-//! - Compression ratio and throughput (MiB/s)
-//! - Decompression throughput (MiB/s) 
-//! - Random access latency (ns)
-//!
-//! Results are appended to a JSON file for aggregation by the main benchmark harness.
-//! CPU core affinity can be specified for consistent measurements in controlled environments.
+/**
+ * Individual benchmark executor for compression algorithm evaluation
+ *
+ * This binary performs isolated performance measurement of a single compression algorithm
+ * on a single dataset. Metrics collected include:
+ * - Compression ratio and throughput (MiB/s)
+ * - Decompression throughput (MiB/s) 
+ * - Random access latency (ns)
+ *
+ * Results are appended to a JSON file for aggregation by the main benchmark harness.
+ * CPU core affinity can be specified for consistent measurements in controlled environments.
+ */
 
 #include <iostream>
 #include <fstream>
@@ -32,18 +34,25 @@
 #include "bpe_compressor.h"
 #include "benchmark_utils.h"
 
-/// Number of random access queries for latency measurement
+// Number of random access queries for latency measurement
 const size_t N_QUERIES = 1000000;
 
-/// Core benchmark function implementing the measurement protocol
-/// 
-/// Executes the complete evaluation pipeline:
-/// 1. Compression phase with timing measurement
-/// 2. Full decompression with validation and timing  
-/// 3. Random access evaluation over N_QUERIES uniformly distributed queries
-/// 4. Data integrity verification at each step
-///
-/// Returns aggregated performance metrics for statistical analysis.
+/**
+ * Core benchmark function implementing the measurement protocol
+ * 
+ * Executes the complete evaluation pipeline:
+ * 1. Compression phase with timing measurement
+ * 2. Full decompression with validation and timing  
+ * 3. Random access evaluation over N_QUERIES uniformly distributed queries
+ * 4. Data integrity verification at each step
+ *
+ * @param compressor The compression algorithm instance to benchmark
+ * @param dataset_name Name of the dataset being evaluated
+ * @param data Raw byte data from the dataset
+ * @param end_positions Boundary positions for individual strings in the data
+ * @param queries Vector of random indices for access pattern simulation
+ * @return BenchmarkResult containing aggregated performance metrics for statistical analysis
+ */
 template <typename CompressorType>
 BenchmarkResult benchmark(CompressorType& compressor,
                           const std::string& dataset_name,
@@ -103,7 +112,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
     return result;
 }
 
-/// Individual benchmark execution entry point
+// Individual benchmark execution entry point
 int main(int argc, char* argv[]) {
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0] << " <dataset_path> <compressor_name> <output_file> [core_id]\n";
