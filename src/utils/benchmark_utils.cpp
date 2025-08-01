@@ -4,6 +4,10 @@
 #include <stdexcept>
 #include "simdjson.h"
 #include <random>
+#ifdef __linux__
+#include <sched.h>
+#include <system_error>
+#endif
 
 std::pair<std::vector<uint8_t>, std::vector<size_t>> load_dataset(const std::filesystem::path& path) {
     std::ifstream file(path);
@@ -207,11 +211,17 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
     }
 }
 
-void set_affinity(int core_id) {
+#ifdef __linux__
+bool try_set_affinity(int core_id) {
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
     CPU_SET(core_id, &cpuset);
-    if (sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) != 0) {
-        throw std::system_error(errno, std::generic_category(), "sched_setaffinity failed");
-    }
+    return sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) == 0;
 }
+#else
+bool try_set_affinity(int core_id) {
+    // CPU affinity is not supported on this platform
+    (void)core_id; // Suppress unused parameter warning
+    return false;
+}
+#endif

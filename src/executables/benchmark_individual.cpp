@@ -1,10 +1,21 @@
+//! Individual benchmark executor for compression algorithm evaluation
+//!
+//! This binary performs isolated performance measurement of a single compression algorithm
+//! on a single dataset. Metrics collected include:
+//! - Compression ratio and throughput (MiB/s)
+//! - Decompression throughput (MiB/s) 
+//! - Random access latency (ns)
+//!
+//! Results are appended to a JSON file for aggregation by the main benchmark harness.
+//! CPU core affinity can be specified for consistent measurements in controlled environments.
+
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <filesystem>
 #include <chrono>
-#include <sched.h>
 #include <stdexcept>
+#include <optional>
 #include "raw_compressor.h"
 #include "fsst_compressor.h"
 #include "fsst_block_compressor.h"
@@ -21,9 +32,18 @@
 #include "bpe_compressor.h"
 #include "benchmark_utils.h"
 
-const int DEFAULT_CORE_ID = 0;
+/// Number of random access queries for latency measurement
 const size_t N_QUERIES = 1000000;
 
+/// Core benchmark function implementing the measurement protocol
+/// 
+/// Executes the complete evaluation pipeline:
+/// 1. Compression phase with timing measurement
+/// 2. Full decompression with validation and timing  
+/// 3. Random access evaluation over N_QUERIES uniformly distributed queries
+/// 4. Data integrity verification at each step
+///
+/// Returns aggregated performance metrics for statistical analysis.
 template <typename CompressorType>
 BenchmarkResult benchmark(CompressorType& compressor,
                           const std::string& dataset_name,
@@ -31,8 +51,6 @@ BenchmarkResult benchmark(CompressorType& compressor,
                           const std::vector<size_t>& end_positions,
                           const std::vector<size_t>& queries) {
     std::vector<uint8_t> buffer(data.size() + 1024);
-
-    // Calculate the total size of random access data
     const double data_bytes = static_cast<double>(data.size());
 
     // Initialize benchmark result
@@ -40,7 +58,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
     result.dataset_name = dataset_name;
     result.compressor_name = compressor.name();
 
-    // Compression
+    // Phase 1: Compression measurement
     auto start_compression = std::chrono::high_resolution_clock::now();
     compressor.compress(data.data(), end_positions);
     auto end_compression = std::chrono::high_resolution_clock::now();
@@ -49,18 +67,19 @@ BenchmarkResult benchmark(CompressorType& compressor,
     result.compression_rate = data_bytes / static_cast<double>(compressor.space_used_bytes());
     result.compression_speed = (data_bytes / (1024.0 * 1024.0)) / compression_time;
 
-    // Decompression
+    // Phase 2: Decompression measurement with validation
     auto start_decompression = std::chrono::high_resolution_clock::now();
     size_t b_size = compressor.decompress(buffer.data());
     auto end_decompression = std::chrono::high_resolution_clock::now();
     
+    // Verify decompression correctness
     if (!std::equal(data.data(), data.data() + data.size(), buffer.data())) {
         throw std::runtime_error("Data mismatch during decompression for compressor: " + std::string(compressor.name()));
     }
     double decompression_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_decompression - start_decompression).count();
     result.decompression_speed = (data_bytes / (1024.0 * 1024.0)) / decompression_time;
 
-    // Random Access
+    // Phase 3: Random access latency measurement
     size_t total_random_access_time = 0;
     for (size_t query : queries) {
         size_t start_position = end_positions[query];
@@ -71,6 +90,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
         size_t b_size = compressor.get_item_at(query, buffer.data());
         auto end_random_access = std::chrono::high_resolution_clock::now();
         
+        // Verify random access correctness
         if (!std::equal(data.data() + start_position, data.data() + end_position, buffer.data())) {
             throw std::runtime_error("Data mismatch during random access for compressor: " + std::string(compressor.name()));
         }
@@ -83,6 +103,7 @@ BenchmarkResult benchmark(CompressorType& compressor,
     return result;
 }
 
+/// Individual benchmark execution entry point
 int main(int argc, char* argv[]) {
     if (argc < 4) {
         std::cerr << "Usage: " << argv[0] << " <dataset_path> <compressor_name> <output_file> [core_id]\n";
@@ -92,7 +113,15 @@ int main(int argc, char* argv[]) {
     std::filesystem::path dataset_path(argv[1]);
     std::string compressor_name(argv[2]);
     std::filesystem::path output_file(argv[3]);
-    int core_id = (argc > 4) ? std::stoi(argv[4]) : DEFAULT_CORE_ID;
+    std::optional<int> core_id = std::nullopt;
+    if (argc > 4) {
+        try {
+            core_id = std::stoi(argv[4]);
+        } catch (const std::exception&) {
+            std::cerr << "Error: Invalid core_id '" << argv[4] << "'. Must be a valid number.\n";
+            return 1;
+        }
+    }
 
     // Validate dataset path
     if (!std::filesystem::exists(dataset_path)) {
@@ -104,8 +133,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Set CPU affinity
-    set_affinity(core_id);
+    // Set CPU affinity if specified
+    if (core_id.has_value()) {
+        if (!try_set_affinity(core_id.value())) {
+            std::cerr << "Warning: Failed to set CPU affinity to core " << core_id.value() 
+                      << ". Continuing without core pinning.\n";
+        }
+    }
 
     try {
         // Load dataset
