@@ -19,8 +19,6 @@
 #include "onpair_bv_compressor.h"
 #include "deflate_individual_compressor.h"
 #include "bpe_compressor.h"
-#include "sampled_bpe_compressor.h"
-#include "sampled_bpe16_compressor.h"
 #include "benchmark_utils.h"
 
 const int DEFAULT_CORE_ID = 0;
@@ -172,14 +170,6 @@ int main(int argc, char* argv[]) {
         }
         else if (compressor_name == "bpe") {
             BPECompressor compressor = BPECompressor::create(data.size(), end_positions.size()-1);
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        }
-        else if (compressor_name == "sampled_bpe") {
-            SampledBPECompressor compressor = SampledBPECompressor::create(data.size(), end_positions.size()-1);
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        }
-        else if (compressor_name == "sampled_bpe16") {
-            SampledBPE16Compressor compressor = SampledBPE16Compressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {
