@@ -50,7 +50,7 @@ foreach(executable_path ${PROJECT_EXECUTABLES})
     target_link_libraries(${executable_name} PRIVATE 
         simdjson::simdjson
         fsst
-        onpair_lib
+        onpair
         unofficial::brotli::brotlidec 
         unofficial::brotli::brotlienc
         ZLIB::ZLIB
