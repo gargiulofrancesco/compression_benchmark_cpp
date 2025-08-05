@@ -1,17 +1,17 @@
-# OnPair: Short Strings Compression for Fast Random Access
+# OnPair Compression Benchmark Suite
 
-This repository contains the C++ implementation and benchmark suite for **OnPair**, a compression algorithm designed for efficient random access on sequences of short strings.
+[![Paper](https://img.shields.io/badge/Paper-arXiv:2508.02280-blue)](https://arxiv.org/abs/2508.02280)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+This repository contains the C++ **experimental evaluation framework** for the paper:
+
+> **[OnPair: Short Strings Compression for Fast Random Access](https://arxiv.org/abs/2508.02280)**  
 
 ## Overview
 
-OnPair is a field-level compression algorithm designed for workloads requiring fast random access to individual strings in large collections. The compression process consists of two distinct phases:
+**OnPair** is a compression algorithm specifically designed for workloads requiring fast random access to individual strings in large collections. This benchmark suite provides comprehensive performance evaluation tools to compare OnPair against established compression methods.
 
-- **Training Phase**: A longest prefix matching strategy is used to parse the input and identify frequent adjacent token pairs. When the frequency of a pair exceeds a predefined threshold, a new token is created to represent the merged pair. This continues until the dictionary is full or the input data is exhausted. The dictionary supports up to 65,536 tokens, with each token assigned a fixed 2-byte ID.
-- **Parsing Phase**: Once the dictionary is constructed, each string is compressed independently into a sequence of token IDs by greedily applying longest prefix matching
-
-OnPair16 is a variant that limits dictionary entries to a maximum length of 16 bytes. This constraint enables further optimizations in both longest prefix matching and decoding.
-
-**Note**: The optimized static longest prefix matching for OnPair16 is currently available only in the [Rust implementation](https://github.com/gargiulofrancesco/compression_benchmark_rs).
+For the **standalone OnPair algorithm implementation**, see: **[onpair_cpp](https://github.com/gargiulofrancesco/onpair_cpp)** 
 
 ## Quick Start
 
@@ -49,71 +49,85 @@ cmake --build . --config Release
 
 ### Running Benchmarks
 
-#### Single Algorithm Benchmark
+#### Single Algorithm Evaluation
+Evaluate a specific algorithm on a dataset:
+
 ```bash
 ./benchmark_individual <dataset.json> <algorithm> <output.json> [core_id]
 ```
 
 **Example:**
 ```bash
-./benchmark_individual data/example.json onpair16 results.json
+# Run onpair16 algorithm on example dataset with CPU core pinning
+./benchmark_individual data/example.json onpair16 results.json 0
 ```
 
-#### Complete Benchmark Suite
+#### Comprehensive Benchmark Suite
+Run all algorithms on all datasets in a directory:
+
 ```bash
 ./benchmark_all <dataset_directory> [core_id]
 ```
 
 **Examples:**
 ```bash
-# Run on all datasets with core pinning to CPU core 0
+# Run complete benchmark suite with CPU core pinning
 ./benchmark_all data/ 0
 ```
 
-This runs all algorithms on all JSON datasets in the directory and produces a comprehensive comparison.
+This generates a comprehensive performance comparison across all algorithms and datasets.
 
-### Supported Algorithms
-- `raw` - Uncompressed baseline
-- `brotli` - Google's Brotli compression
-- `deflate` - DEFLATE compression algorithm
-- `lz4` - LZ4 fast compression
-- `snappy` - Google's Snappy compression
-- `xz` - XZ compression
-- `zstd` - Facebook's Zstandard compression
-- `bpe` - Byte Pair Encoding
-- `fsst` - Fast Static Symbol Table compression
-- `onpair` - OnPair algorithm
-- `onpair_bv` - OnPair with bit vectors
-- `onpair16` - OnPair with 16-byte limits
+
+## Supported Algorithms
+
+| Algorithm | Description |
+|-----------|-------------|
+| `raw` | Uncompressed baseline |
+| `brotli` | Google's Brotli compression |
+| `deflate` | DEFLATE compression algorithm |
+| `lz4` | LZ4 fast compression |
+| `snappy` | Google's Snappy compression |
+| `xz` | XZ compression |
+| `zstd` | Facebook's Zstandard compression |
+| `bpe` | Byte Pair Encoding |
+| `fsst` | Fast Static Symbol Table compression |
+| `onpair` | OnPair algorithm |
+| `onpair_bv` | OnPair with bit vectors |
+| `onpair16` | OnPair with 16-byte limits |
 
 ## Dataset Format
 
-Datasets should be JSON arrays of strings:
+Datasets must be JSON arrays of strings:
 
 ```json
 [
-   "first string",
-   "second string", 
-   "third string"
+   "user_12345",
+   "admin_67890", 
+   "guest_11111",
+   "user_54321"
 ]
 ```
 
-## Benchmark Metrics
+## Performance Metrics
 
-The benchmark suite measures:
+The benchmark suite evaluates algorithms across four key dimensions:
 
-- **Compression Ratio**: `original_size / compressed_size`
-- **Compression Speed**: MiB/s during compression
-- **Decompression Speed**: MiB/s during full decompression  
-- **Random Access Time**: Average nanoseconds per string access
+| Metric | Description | Units |
+|--------|-------------|-------|
+| **Compression Ratio** | `original_size / compressed_size` | Ratio |
+| **Compression Speed** | Throughput during compression | MiB/s |
+| **Decompression Speed** | Throughput during full decompression | MiB/s |
+| **Random Access Time** | Average time per individual string access | nanoseconds |
 
-Results are output in JSON format for easy analysis and visualization.
+**Output Format:** Results are exported as structured JSON for easy analysis and visualization.
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Contact
+## Authors
 
-- **Francesco Gargiulo**: [francesco.gargiulo@phd.unipi.it]
-- **Rossano Venturini**: [rossano.venturini@unipi.it]
+- **Francesco Gargiulo** - [francesco.gargiulo@phd.unipi.it](mailto:francesco.gargiulo@phd.unipi.it)
+- **Rossano Venturini** - [rossano.venturini@unipi.it](mailto:rossano.venturini@unipi.it)
+
+*University of Pisa, Italy*

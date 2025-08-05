@@ -1,4 +1,5 @@
 #include "onpair_bv_compressor.h"
+#include "pair_hash.h"
 #include <cstring>
 #include <robin_hood.h>
 #include <random>
@@ -81,7 +82,7 @@ const char* OnPairBVCompressor::name() const {
 LongestPrefixMatcher<uint32_t> OnPairBVCompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
     dictionary_offsets.push_back(0);
     
-    robin_hood::unordered_map<std::pair<uint32_t, uint32_t>, uint16_t, pair_hash> frequency;
+    robin_hood::unordered_map<std::pair<uint32_t, uint32_t>, uint16_t, PairHash> frequency;
     LongestPrefixMatcher<uint32_t> lpm;
     uint32_t next_token_id = 256;
     bool full_dictionary = false;

@@ -19,12 +19,16 @@ find_package(Snappy CONFIG REQUIRED)
 # Add the external FSST submodule
 add_subdirectory(external/fsst)
 
+# Add the external OnPair submodule
+add_subdirectory(external/onpair)
+
 # Define a reusable variable for include directories
 set(PROJECT_INCLUDE_DIRS
     include/compressors
     include/utils
     external/fsst
     external/robin_hood
+    external/onpair/include
 )
 
 # Source files
@@ -46,6 +50,7 @@ foreach(executable_path ${PROJECT_EXECUTABLES})
     target_link_libraries(${executable_name} PRIVATE 
         simdjson::simdjson
         fsst
+        onpair_lib
         unofficial::brotli::brotlidec 
         unofficial::brotli::brotlienc
         ZLIB::ZLIB

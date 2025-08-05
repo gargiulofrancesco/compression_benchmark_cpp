@@ -35,7 +35,7 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
     robin_hood::unordered_set<size_t> end_positions_set(end_positions.begin() + 1, end_positions.end());
 
     // Initialize pair positions    
-    robin_hood::unordered_map<Pair, robin_hood::unordered_set<size_t>, pair_hash> pair_pos;
+    robin_hood::unordered_map<Pair, robin_hood::unordered_set<size_t>, PairHash> pair_pos;
     for (size_t i=0; i<end_positions.back()-1; i++) {
         if(end_positions_set.contains(i+1)) {
             continue;
@@ -89,7 +89,7 @@ void BPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end
         dictionary_offsets.push_back(dictionary_data.size());
 
         // Keep track of new pairs that will form after merging
-        robin_hood::unordered_set<Pair, pair_hash> new_pairs;
+        robin_hood::unordered_set<Pair, PairHash> new_pairs;
 
         // Update occurrences of the top pair
         for(size_t pos : positions) {

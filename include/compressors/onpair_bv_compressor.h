@@ -2,7 +2,7 @@
 #define ONPAIR_BV_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
-#include "lpm.h"
+#include "lpm.h" // From external/onpair
 #include "bitvector.h"
 
 class OnPairBVCompressor : public Compressor<OnPairBVCompressor> {
