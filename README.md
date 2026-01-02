@@ -47,6 +47,24 @@ cmake -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -DC
 cmake --build . --config Release
 ```
 
+### Datasets
+
+To reproduce the experiments presented in the paper, use the provided Python script to download and process the standard datasets:
+
+```bash
+# Create a virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r scripts/requirements.txt
+
+# Download and process datasets
+python scripts/process_datasets.py
+```
+
+The script will download and process the datasets into the JSON format required by the benchmark suite. The datasets will be saved in the `data/` directory.
+
 ### Running Benchmarks
 
 #### Single Algorithm Evaluation
@@ -90,6 +108,7 @@ This generates a comprehensive performance comparison across all algorithms and 
 | `xz` | XZ compression |
 | `zstd` | Facebook's Zstandard compression |
 | `bpe` | Byte Pair Encoding |
+| `sampled_bpe` | Sampled Byte Pair Encoding |
 | `fsst` | Fast Static Symbol Table compression |
 | `onpair` | OnPair algorithm |
 | `onpair_bv` | OnPair with bit vectors |

@@ -15,3 +15,9 @@ Makefile
 
 # Build directories
 build/
+
+# Python virtual environment
+scripts/venv/
+
+# Datasets
+data/
