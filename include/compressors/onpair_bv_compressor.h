@@ -2,11 +2,12 @@
 #define ONPAIR_BV_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
-#include "lpm.h" // From external/onpair
+#include "lpm.h"
 #include "bitvector.h"
 
 class OnPairBVCompressor : public Compressor<OnPairBVCompressor> {
 private:
+    static constexpr size_t THRESHOLD = 10;
     static constexpr size_t FAST_ACCESS_SIZE = 16;
     static constexpr size_t BITS_PER_TOKEN = 13;
     static constexpr uint32_t MAX_TOKEN_ID = (1 << BITS_PER_TOKEN) - 1;

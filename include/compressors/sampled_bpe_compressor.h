@@ -2,7 +2,7 @@
 #define SAMPLED_BPE_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
-#include "lpm.h" // From external/onpair
+#include "lpm.h" 
 
 class SampledBPECompressor : public Compressor<SampledBPECompressor> {
 private:

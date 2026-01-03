@@ -2,11 +2,20 @@
 #define ONPAIR_COMPRESSOR_H
 
 #include "compressor.h" // Includes the base class Compressor
-#include "onpair.h"
+#include "lpm.h"
 
 class OnPairCompressor : public Compressor<OnPairCompressor> {
 private:
-    OnPair onpair;
+    static constexpr size_t THRESHOLD = 10;
+    static constexpr size_t FAST_COPY_SIZE = 16;
+
+    std::vector<uint16_t> compressed_data;
+    std::vector<size_t> string_boundaries;
+    std::vector<uint8_t> dictionary; 
+    std::vector<uint32_t> token_boundaries; 
+
+    LongestPrefixMatcher<uint16_t> train_dictionary(const uint8_t* data, const std::vector<size_t>& end_positions);
+    void parse_data(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm);
 
 public:
     OnPairCompressor(size_t data_size, size_t n_elements);

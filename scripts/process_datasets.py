@@ -14,11 +14,11 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 # Dataset 1: MS MARCO Queries
 MSMARCO_QUERIES_URL = "https://msmarco.z22.web.core.windows.net/msmarcoranking/queries.tar.gz"
-MSMARCO_QUERIES_OUTPUT = "msmarco_queries.json"
+MSMARCO_QUERIES_OUTPUT = "query_logs.json"
 
 # Dataset 2: MS MARCO URLs
 MSMARCO_URLS_URL = "https://msmarco.z22.web.core.windows.net/msmarcoranking/msmarco-docs.tsv.gz"
-MSMARCO_URLS_OUTPUT = "msmarco_urls.json"
+MSMARCO_URLS_OUTPUT = "urls.json"
 
 # Dataset 3: Amazon Book Titles
 AMAZON_BOOKS_URL = "https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Books.jsonl.gz"
@@ -26,7 +26,7 @@ AMAZON_BOOKS_OUTPUT = "book_titles.json"
 
 # Dataset 4: DBpedia Abstracts
 DBPEDIA_URL = "https://databus.dbpedia.org/dbpedia/text/short-abstracts/2022.12.01/short-abstracts_lang=en.ttl.bz2"
-DBPEDIA_OUTPUT = "dbpedia_abstracts.json"
+DBPEDIA_OUTPUT = "wikipedia.json"
 DBPEDIA_LIMIT = 1_000_000
 
 def ensure_data_dir():
