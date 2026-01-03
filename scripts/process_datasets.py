@@ -122,7 +122,6 @@ def process_msmarco_urls():
         
         # Process line-by-line using gzip
         print("  Scanning corpus for URLs...")
-        # gzip.open allows us to read the compressed file directly without extracting 100GB+ of text
         with gzip.open(temp_archive_path, mode="rt", encoding="utf-8") as f_in:
             for line in tqdm(f_in, desc="  Extracting", unit=" docs"):
                 # TSV Format: docid <tab> url <tab> title <tab> body

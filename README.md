@@ -53,7 +53,7 @@ To reproduce the experiments presented in the paper, use the provided Python scr
 
 ```bash
 # Create a virtual environment
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate
 
 # Install dependencies
