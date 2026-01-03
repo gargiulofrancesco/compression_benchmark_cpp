@@ -2,6 +2,3 @@
 	path = external/fsst
 	url = https://github.com/cwida/fsst.git
 
-[submodule "external/onpair"]
-	path = external/onpair
-	url = https://github.com/gargiulofrancesco/onpair_cpp.git
