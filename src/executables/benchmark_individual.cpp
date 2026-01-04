@@ -7,8 +7,7 @@
  * - Decompression throughput (MiB/s) 
  * - Random access latency (ns)
  *
- * Results are appended to a JSON file for aggregation by the main benchmark harness.
- * CPU core affinity can be specified for consistent measurements in controlled environments.
+ * Results are appended to a JSON file for later aggregation and analysis.
  */
 
 #include <iostream>
@@ -35,6 +34,10 @@
 
 // Number of random access queries for latency measurement
 const size_t N_QUERIES = 1000000;
+
+// Fixed seed and target sample fraction for dictionary training (OnPair and Sampled BPE)
+const size_t SEED = 42;
+const float TARGET_SAMPLE_FRACTION = 0.1f;
 
 /**
  * Core benchmark function implementing the measurement protocol
@@ -111,6 +114,105 @@ BenchmarkResult benchmark(CompressorType& compressor,
     return result;
 }
 
+/**
+ * Warmup function to prepare CPU caches and branch predictors
+ * 
+ * Does not record metrics but ensures the system is in a steady state
+ * before the actual measurement begins.
+ */
+template <typename CompressorType>
+void warmup(const std::string& dataset_name,
+            const std::vector<uint8_t>& data,
+            const std::vector<size_t>& end_positions,
+            const std::vector<size_t>& queries) {    
+    // Limit warmup to ~256KiB
+    const size_t TARGET_WARMUP_SIZE = 256 * 1024;
+    
+    // Find the first position where cumulative size >= TARGET_WARMUP_SIZE using binary search
+    auto it = std::lower_bound(end_positions.begin(), end_positions.end(), TARGET_WARMUP_SIZE);
+    size_t limit_idx = std::distance(end_positions.begin(), it);
+    
+    // Ensure we don't exceed the available data
+    limit_idx = std::min(limit_idx, end_positions.size() - 1);
+    
+    size_t warmup_data_size = end_positions[limit_idx];
+    std::vector<size_t> warmup_end_positions(end_positions.begin(), end_positions.begin() + limit_idx + 1);
+
+    // Create a temporary compressor for warmup
+    CompressorType compressor = CompressorType::create(warmup_data_size, limit_idx);
+    std::vector<uint8_t> buffer(warmup_data_size + 1024);
+
+    // Dummy variable to prevent compiler optimizations
+    size_t dummy = 0;
+
+    // Phase 1: Compression
+    compressor.compress(data.data(), warmup_end_positions);
+    dummy += compressor.space_used_bytes();
+
+    // Phase 2: Decompression
+    dummy += compressor.decompress(buffer.data());
+
+    // Phase 3: Random access (subset of queries)
+    size_t n_warmup_queries = std::min(size_t(10000), queries.size() - 1);
+    for (size_t i = 0; i < n_warmup_queries; ++i) {
+       dummy += compressor.get_item_at(queries[i] % limit_idx, buffer.data());
+    }
+
+    // Prevent compiler from optimizing away the warmup code
+    if (dummy == 0) {
+        std::cout << "Warmup dummy value: " << dummy << std::endl;
+    }
+}
+
+/**
+ * Determines optimal parameters for OnPair compression to ensure fair comparison.
+ * 
+ * To compare OnPair and Sampled BPE fairly, we want both algorithms to use 
+ * the same sample for dictionary training.
+ * 
+ * OnPair's training data size depends on its frequency threshold:
+ * - Higher threshold -> slower dictionary filling -> more data processed
+ * - Lower threshold -> faster dictionary filling -> less data processed
+ * 
+ * This function iterates through possible thresholds to find one that results
+ * in a training sample size closest to TARGET_SAMPLE_FRACTION (e.g., 10%) of the dataset.
+ * The resulting sample size is then used to configure Sampled BPE.
+ */
+std::pair<size_t, size_t> find_onpair_params(
+    const std::vector<uint8_t>& data,
+    const std::vector<size_t>& end_positions
+) {
+    size_t n_elements = end_positions.size() - 1;
+    size_t data_size = end_positions.back();
+    size_t target_sample_size = static_cast<size_t>(data_size * TARGET_SAMPLE_FRACTION);
+
+    size_t threshold = 2;
+    size_t prev_sample_size = 0;
+    while (true) {
+        OnPairCompressor onpair(data_size, n_elements);
+        onpair.set_seed(SEED);
+        onpair.set_threshold(threshold);
+        auto permutation = onpair.generate_random_permutation(n_elements);
+        auto [_, sample_size] = onpair.train_dictionary(data.data(), end_positions, permutation);
+
+        if (sample_size >= target_sample_size) {
+            if(threshold == 2) {
+                return {threshold, sample_size};
+            }
+            size_t diff_curr = sample_size - target_sample_size;
+            size_t diff_prev = target_sample_size - prev_sample_size;
+            if (diff_prev < diff_curr) {
+                return {threshold - 1, prev_sample_size};
+            } else {
+                return {threshold, sample_size};
+            }
+        }
+
+        prev_sample_size = sample_size;
+        threshold++;
+    }
+}
+
 // Individual benchmark execution entry point
 int main(int argc, char* argv[]) {
     if (argc < 4) {
@@ -159,55 +261,74 @@ int main(int argc, char* argv[]) {
         // Initialize the compressor
         BenchmarkResult result;
         if (compressor_name == "raw") {
+            warmup<RawCompressor>(dataset_name, data, end_positions, queries);
             RawCompressor compressor = RawCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "lz4") {
+            warmup<LZ4Compressor>(dataset_name, data, end_positions, queries);
             LZ4Compressor compressor = LZ4Compressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "snappy") {
+            warmup<SnappyCompressor>(dataset_name, data, end_positions, queries);
             SnappyCompressor compressor = SnappyCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "xz") {
+            warmup<XZCompressor>(dataset_name, data, end_positions, queries);
             XZCompressor compressor = XZCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "zstd") {
+            warmup<ZstdCompressor>(dataset_name, data, end_positions, queries);
             ZstdCompressor compressor = ZstdCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "deflate") {
+            warmup<DeflateCompressor>(dataset_name, data, end_positions, queries);
             DeflateCompressor compressor = DeflateCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "brotli") {
+            warmup<BrotliCompressor>(dataset_name, data, end_positions, queries);
             BrotliCompressor compressor = BrotliCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "fsst") {
+            warmup<FSSTCompressor>(dataset_name, data, end_positions, queries);
             FSSTCompressor compressor = FSSTCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         } 
         else if (compressor_name == "fsst_block") {
+            warmup<FSSTBlockCompressor>(dataset_name, data, end_positions, queries);
             FSSTBlockCompressor compressor = FSSTBlockCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "onpair") {
+            warmup<OnPairCompressor>(dataset_name, data, end_positions, queries);
+            auto [threshold, _] = find_onpair_params(data, end_positions);
             OnPairCompressor compressor = OnPairCompressor::create(data.size(), end_positions.size()-1);
+            compressor.set_seed(SEED);
+            compressor.set_threshold(threshold);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "deflate_individual") {
+            warmup<DeflateIndividualCompressor>(dataset_name, data, end_positions, queries);
             DeflateIndividualCompressor compressor = DeflateIndividualCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "bpe") {
+            warmup<BPECompressor>(dataset_name, data, end_positions, queries);
             BPECompressor compressor = BPECompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else if (compressor_name == "sampled_bpe") {
+            warmup<SampledBPECompressor>(dataset_name, data, end_positions, queries);
+            auto [_, sample_size] = find_onpair_params(data, end_positions);
             SampledBPECompressor compressor = SampledBPECompressor::create(data.size(), end_positions.size()-1);
+            compressor.set_seed(SEED);
+            compressor.set_sample_size(sample_size);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {
