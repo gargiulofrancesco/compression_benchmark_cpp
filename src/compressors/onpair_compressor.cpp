@@ -9,11 +9,29 @@ OnPairCompressor::OnPairCompressor(size_t data_size, size_t n_elements) {
     string_boundaries.reserve(n_elements + 1);
     dictionary.reserve(1024 * 1024);
     token_boundaries.reserve(1 << 16);
+    threshold = 10; // Default threshold
+    seed = 42;    // Default seed
+}
+
+void OnPairCompressor::set_threshold(size_t threshold) {
+    this->threshold = threshold;
+}
+
+void OnPairCompressor::set_seed(size_t seed) {
+    this->seed = seed;
+}
+
+size_t OnPairCompressor::get_threshold() const {
+    return threshold;
+}
+
+size_t OnPairCompressor::get_seed() const {
+    return seed;
 }
 
 void OnPairCompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) {
     std::vector<int> shuffled_indices = generate_random_permutation(end_positions.size() - 1);
-    auto [lpm, _] = train_dictionary(data, end_positions, THRESHOLD, shuffled_indices);
+    auto [lpm, _] = train_dictionary(data, end_positions, shuffled_indices);
     parse_data(data, end_positions, lpm);
 }
 
@@ -75,17 +93,7 @@ const char* OnPairCompressor::name() const {
     return "OnPair";
 }
 
-std::vector<int> OnPairCompressor::generate_random_permutation(const size_t n_elements, const size_t seed) {
-    std::vector<int> shuffled_indices(n_elements);
-    std::iota(shuffled_indices.begin(), shuffled_indices.end(), 0);
-
-    std::mt19937 g(seed);
-    std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), g);
-
-    return shuffled_indices;
-}
-
-std::pair<LongestPrefixMatcher<uint16_t>, size_t> OnPairCompressor::train_dictionary(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t threshold, const std::vector<int>& shuffled_indices) {
+std::pair<LongestPrefixMatcher<uint16_t>, size_t> OnPairCompressor::train_dictionary(const uint8_t* data, const std::vector<size_t>& end_positions, const std::vector<int>& shuffled_indices) {
     token_boundaries.push_back(0);
     
     robin_hood::unordered_map<std::pair<uint16_t, uint16_t>, uint16_t, PairHash> frequency;
@@ -185,4 +193,14 @@ void OnPairCompressor::parse_data(const uint8_t* data, const std::vector<size_t>
 
         string_boundaries.push_back(compressed_data.size());
     }
+}
+
+std::vector<int> OnPairCompressor::generate_random_permutation(const size_t n_elements) {
+    std::vector<int> shuffled_indices(n_elements);
+    std::iota(shuffled_indices.begin(), shuffled_indices.end(), 0);
+
+    std::mt19937 g(seed);
+    std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), g);
+
+    return shuffled_indices;
 }

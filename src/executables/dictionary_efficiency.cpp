@@ -73,17 +73,23 @@ int main(int argc, char* argv[]) {
     OnPairCompressor onpair_warmup(data_size, n_elements);
     SampledBPECompressor sampled_bpe_warmup(data_size, n_elements);
 
+    // Set fixed seed for permutation
+    onpair_warmup.set_seed(SEED);
+    sampled_bpe_warmup.set_seed(SEED);
+
     // Generate permutation for the full dataset with fixed seed
-    std::vector<int> permutation = onpair_warmup.generate_random_permutation(n_elements, SEED);
+    std::vector<int> permutation = onpair_warmup.generate_random_permutation(n_elements);
 
     // Warmup phase
     {
         // Warmup OnPair
-        auto [lpm_warmup, warmup_sample_size] = onpair_warmup.train_dictionary(data.data(), end_positions, MAX_THRESHOLD, permutation);
+        onpair_warmup.set_threshold(MAX_THRESHOLD);
+        auto [lpm_warmup, warmup_sample_size] = onpair_warmup.train_dictionary(data.data(), end_positions, permutation);
         onpair_warmup.parse_data(data.data(), end_positions, lpm_warmup);
         
         // Warmup Sampled BPE
-        auto [sampled_data_warmup, sampled_end_positions_warmup] = sampled_bpe_warmup.sampling(data.data(), end_positions, warmup_sample_size, SEED);
+        sampled_bpe_warmup.set_sample_size(warmup_sample_size);
+        auto [sampled_data_warmup, sampled_end_positions_warmup] = sampled_bpe_warmup.sampling(data.data(), end_positions);
         auto lpm_bpe_warmup = sampled_bpe_warmup.train_dictionary(sampled_data_warmup.data(), sampled_end_positions_warmup);
         sampled_bpe_warmup.parse_data(data.data(), end_positions, lpm_bpe_warmup);
     }
@@ -99,14 +105,21 @@ int main(int argc, char* argv[]) {
               << std::endl;
 
     for (size_t threshold = 2; threshold <= MAX_THRESHOLD; ++threshold) {
-        // Create fresh compressors for each iteration to avoid state accumulation
+        // Create fresh compressors for each iteration
         OnPairCompressor onpair(data_size, n_elements);
         SampledBPECompressor sampled_bpe(data_size, n_elements);
+
+        // Set fixed seed for permutation
+        onpair.set_seed(SEED);
+        sampled_bpe.set_seed(SEED);
+
+        // Set threshold for OnPair
+        onpair.set_threshold(threshold);
 
         // --- OnPair ---
         // Measure OnPair training time
         auto start_onpair = std::chrono::high_resolution_clock::now();
-        auto [lpm_onpair, onpair_sample_size] = onpair.train_dictionary(data.data(), end_positions, threshold, permutation);
+        auto [lpm_onpair, onpair_sample_size] = onpair.train_dictionary(data.data(), end_positions, permutation);
         auto end_onpair = std::chrono::high_resolution_clock::now();
         double onpair_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_onpair - start_onpair).count();
 
@@ -116,8 +129,9 @@ int main(int argc, char* argv[]) {
         double onpair_ratio = static_cast<double>(data_size) / static_cast<double>(onpair_size);
 
         // --- Sampled BPE ---
-        // Generate sample using the same size and seed as OnPair
-        auto [sampled_data, sampled_end_positions] = sampled_bpe.sampling(data.data(), end_positions, onpair_sample_size, SEED);
+        // Generate sample using the same sample as OnPair
+        sampled_bpe.set_sample_size(onpair_sample_size);
+        auto [sampled_data, sampled_end_positions] = sampled_bpe.sampling(data.data(), end_positions);
 
         // Measure Sampled BPE training time
         auto start_bpe = std::chrono::high_resolution_clock::now();

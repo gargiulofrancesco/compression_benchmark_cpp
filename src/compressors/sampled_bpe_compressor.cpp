@@ -11,22 +11,39 @@ using Pair = std::pair<uint16_t, uint16_t>;
 
 SampledBPECompressor::SampledBPECompressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
-    offsets.reserve(n_elements);
-    dictionary_data.reserve(2 * (1024 * 1024)); // 2 MB
-    dictionary_offsets.reserve(1 << 16);
+    string_boundaries.reserve(n_elements);
+    dictionary.reserve(2 * (1024 * 1024)); // 2 MB
+    token_boundaries.reserve(1 << 16);
+    sample_size = 0.1 * data_size; // Default sample size is 10% of data
+    seed = 42; // Default seed
+}
+
+void SampledBPECompressor::set_sample_size(size_t sample_size) {
+    this->sample_size = sample_size;
+}
+
+void SampledBPECompressor::set_seed(size_t seed) {
+    this->seed = seed;
+}
+
+size_t SampledBPECompressor::get_sample_size() const {
+    return sample_size;
+}
+
+size_t SampledBPECompressor::get_seed() const {
+    return seed;
 }
 
 void SampledBPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) { 
-    size_t sample_size = SAMPLE_SIZE_PERCENTAGE * end_positions.back();
-    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, sample_size);
+    auto [sampled_data, sampled_end_positions] = sampling(data, end_positions);
     LongestPrefixMatcher<uint16_t> lpm = train_dictionary(sampled_data.data(), sampled_end_positions);
     parse_data(data, end_positions, lpm);
 }
 
 // Assumes buffer has enough space to store the decompressed data
 size_t SampledBPECompressor::decompress(uint8_t* buffer) const {
-    const uint8_t* dict_ptr = dictionary_data.data();
-    const uint32_t* offsets_ptr = dictionary_offsets.data();
+    const uint8_t* dict_ptr = dictionary.data();
+    const uint32_t* offsets_ptr = token_boundaries.data();
     size_t size = 0;
 
     for (uint16_t token_id : compressed_data) {
@@ -47,12 +64,12 @@ size_t SampledBPECompressor::decompress(uint8_t* buffer) const {
 
 // Assumes buffer has enough space to store the decompressed data
 size_t SampledBPECompressor::get_item_at(size_t index, uint8_t* buffer) const {
-    const uint8_t* dict_ptr = dictionary_data.data();
-    const uint32_t* offsets_ptr = dictionary_offsets.data();
+    const uint8_t* dict_ptr = dictionary.data();
+    const uint32_t* offsets_ptr = token_boundaries.data();
     size_t size = 0;
 
-    size_t data_start = offsets[index];
-    size_t data_end = offsets[index + 1];
+    size_t data_start = string_boundaries[index];
+    size_t data_end = string_boundaries[index + 1];
 
     for (size_t i = data_start; i < data_end; i++) {
         uint16_t token_id = compressed_data[i];
@@ -74,7 +91,7 @@ size_t SampledBPECompressor::get_item_at(size_t index, uint8_t* buffer) const {
 }
 
 size_t SampledBPECompressor::space_used_bytes() const {
-    return compressed_data.size() * sizeof(uint16_t) + dictionary_data.size() + dictionary_offsets.size() * sizeof(uint32_t);
+    return compressed_data.size() * sizeof(uint16_t) + dictionary.size() + token_boundaries.size() * sizeof(uint32_t);
 }
 
 const char* SampledBPECompressor::name() const {
@@ -85,12 +102,12 @@ LongestPrefixMatcher<uint16_t> SampledBPECompressor::train_dictionary(const uint
     LongestPrefixMatcher<uint16_t> lpm;
 
     // Initialize the dictionary with single-byte tokens
-    dictionary_offsets.push_back(0);
+    token_boundaries.push_back(0);
     for(uint16_t i=0; i<=255; i++) {
         uint8_t value = static_cast<uint8_t>(i);
         lpm.insert(&value, 1, i);
-        dictionary_data.push_back(value);
-        dictionary_offsets.push_back(dictionary_data.size());
+        dictionary.push_back(value);
+        token_boundaries.push_back(dictionary.size());
     }
 
     // Initialize Token IDs
@@ -151,15 +168,15 @@ LongestPrefixMatcher<uint16_t> SampledBPECompressor::train_dictionary(const uint
         pair_pos.erase({t1, t2});
 
         // Add the new token to the dictionary
-        auto t1_start = dictionary_offsets[t1];
-        auto t1_end = dictionary_offsets[t1 + 1];
-        auto t2_start = dictionary_offsets[t2];
-        auto t2_end = dictionary_offsets[t2 + 1];
+        auto t1_start = token_boundaries[t1];
+        auto t1_end = token_boundaries[t1 + 1];
+        auto t2_start = token_boundaries[t2];
+        auto t2_end = token_boundaries[t2 + 1];
         std::vector<uint8_t> merged_token;
-        merged_token.insert(merged_token.end(), dictionary_data.data() + t1_start, dictionary_data.data() + t1_end);
-        merged_token.insert(merged_token.end(), dictionary_data.data() + t2_start, dictionary_data.data() + t2_end);
-        dictionary_data.insert(dictionary_data.end(), merged_token.begin(), merged_token.end());
-        dictionary_offsets.push_back(dictionary_data.size());
+        merged_token.insert(merged_token.end(), dictionary.data() + t1_start, dictionary.data() + t1_end);
+        merged_token.insert(merged_token.end(), dictionary.data() + t2_start, dictionary.data() + t2_end);
+        dictionary.insert(dictionary.end(), merged_token.begin(), merged_token.end());
+        token_boundaries.push_back(dictionary.size());
         lpm.insert(merged_token.data(), merged_token.size(), next_token_id);
 
         // Keep track of new pairs that will form after merging
@@ -229,14 +246,14 @@ LongestPrefixMatcher<uint16_t> SampledBPECompressor::train_dictionary(const uint
 }
 
 void SampledBPECompressor::parse_data(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm) {
-    offsets.push_back(0);
+    string_boundaries.push_back(0);
 
     for(int i=0; i<end_positions.size()-1; i++) {
         size_t start = end_positions[i];
         size_t end = end_positions[i+1];
 
         if (start == end) {
-            offsets.push_back(compressed_data.size());
+            string_boundaries.push_back(compressed_data.size());
             continue;
         }
 
@@ -252,11 +269,11 @@ void SampledBPECompressor::parse_data(const uint8_t* data, const std::vector<siz
             pos += length;
         }
 
-        offsets.push_back(compressed_data.size());
+        string_boundaries.push_back(compressed_data.size());
     }
 }
 
-std::pair<std::vector<uint8_t>, std::vector<size_t>> SampledBPECompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size, const size_t seed){
+std::pair<std::vector<uint8_t>, std::vector<size_t>> SampledBPECompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions){
     std::vector<uint8_t> sampled_data;
     std::vector<size_t> sampled_end_positions;
 
