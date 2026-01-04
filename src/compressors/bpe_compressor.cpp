@@ -175,9 +175,9 @@ size_t BPECompressor::decompress(uint8_t* buffer) const {
         size_t dict_end = offsets_ptr[token_id + 1];
         size_t length = dict_end - dict_start;
 
-        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
-        if(length > FAST_ACCESS_SIZE) {
-            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
+        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_COPY_SIZE);
+        if(length > FAST_COPY_SIZE) {
+            std::memcpy(buffer + size + FAST_COPY_SIZE, dict_ptr + dict_start + FAST_COPY_SIZE, length - FAST_COPY_SIZE);
         }
 
         size += length;
@@ -203,9 +203,9 @@ size_t BPECompressor::get_item_at(size_t index, uint8_t* buffer) const {
         size_t length = dict_end - dict_start;
 
         // Copy the dictionary entry to the buffer
-        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
-        if(length > FAST_ACCESS_SIZE) {
-            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
+        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_COPY_SIZE);
+        if(length > FAST_COPY_SIZE) {
+            std::memcpy(buffer + size + FAST_COPY_SIZE, dict_ptr + dict_start + FAST_COPY_SIZE, length - FAST_COPY_SIZE);
         }
 
         size += length;

@@ -6,7 +6,7 @@
 
 class SampledBPECompressor : public Compressor<SampledBPECompressor> {
 private:
-    static constexpr size_t FAST_ACCESS_SIZE = 16;
+    static constexpr size_t FAST_COPY_SIZE = 16;
     static constexpr float SAMPLE_SIZE_PERCENTAGE = 0.1; 
 
     std::vector<uint16_t> compressed_data;
@@ -14,12 +14,11 @@ private:
     std::vector<uint8_t> dictionary_data;
     std::vector<uint32_t> dictionary_offsets;
 
-    LongestPrefixMatcher<uint16_t> train(const uint8_t* data, const std::vector<size_t>& end_positions);
-    void parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm);
-    std::pair<std::vector<uint8_t>, std::vector<size_t>> sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size);
-
 public:
-SampledBPECompressor(size_t data_size, size_t n_elements);
+    SampledBPECompressor(size_t data_size, size_t n_elements);
+    LongestPrefixMatcher<uint16_t> train_dictionary(const uint8_t* data, const std::vector<size_t>& end_positions);
+    void parse_data(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm);
+    std::pair<std::vector<uint8_t>, std::vector<size_t>> sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size, const size_t seed = 42);
 
     // Derived class method implementations
     void compress(const uint8_t* data, const std::vector<size_t>& end_positions);

@@ -95,6 +95,21 @@ Run all algorithms on all datasets in a directory:
 
 This generates a comprehensive performance comparison across all algorithms and datasets.
 
+#### Dictionary Efficiency Analysis
+Compare the training efficiency (latency and compression ratio) of OnPair and Sampled BPE on the same sample:
+
+```bash
+./dictionary_efficiency <dataset.json> [core_id]
+```
+
+**Example:**
+```bash
+# Run efficiency analysis on book titles
+./dictionary_efficiency data/book_titles.json 0
+```
+
+This tool runs a series of experiments varying the OnPair frequency threshold (2-15) and compares it against Sampled BPE using the exact same sample size. It outputs a table showing sample size, training time, and compression ratio for both methods.
+
 
 ## Supported Algorithms
 
@@ -111,7 +126,6 @@ This generates a comprehensive performance comparison across all algorithms and 
 | `sampled_bpe` | Sampled Byte Pair Encoding |
 | `fsst` | Fast Static Symbol Table compression |
 | `onpair` | OnPair algorithm |
-| `onpair_bv` | OnPair with bit vectors |
 
 ## Dataset Format
 

@@ -19,8 +19,8 @@ SampledBPECompressor::SampledBPECompressor(size_t data_size, size_t n_elements) 
 void SampledBPECompressor::compress(const uint8_t* data, const std::vector<size_t>& end_positions) { 
     size_t sample_size = SAMPLE_SIZE_PERCENTAGE * end_positions.back();
     auto [sampled_data, sampled_end_positions] = sampling(data, end_positions, sample_size);
-    LongestPrefixMatcher<uint16_t> lpm = train(sampled_data.data(), sampled_end_positions);
-    parse(data, end_positions, lpm);
+    LongestPrefixMatcher<uint16_t> lpm = train_dictionary(sampled_data.data(), sampled_end_positions);
+    parse_data(data, end_positions, lpm);
 }
 
 // Assumes buffer has enough space to store the decompressed data
@@ -34,9 +34,9 @@ size_t SampledBPECompressor::decompress(uint8_t* buffer) const {
         size_t dict_end = offsets_ptr[token_id + 1];
         size_t length = dict_end - dict_start;
 
-        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
-        if(length > FAST_ACCESS_SIZE) {
-            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
+        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_COPY_SIZE);
+        if(length > FAST_COPY_SIZE) {
+            std::memcpy(buffer + size + FAST_COPY_SIZE, dict_ptr + dict_start + FAST_COPY_SIZE, length - FAST_COPY_SIZE);
         }
 
         size += length;
@@ -62,9 +62,9 @@ size_t SampledBPECompressor::get_item_at(size_t index, uint8_t* buffer) const {
         size_t length = dict_end - dict_start;
 
         // Copy the dictionary entry to the buffer
-        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_ACCESS_SIZE);
-        if(length > FAST_ACCESS_SIZE) {
-            std::memcpy(buffer + size + FAST_ACCESS_SIZE, dict_ptr + dict_start + FAST_ACCESS_SIZE, length - FAST_ACCESS_SIZE);
+        std::memcpy(buffer + size, dict_ptr + dict_start, FAST_COPY_SIZE);
+        if(length > FAST_COPY_SIZE) {
+            std::memcpy(buffer + size + FAST_COPY_SIZE, dict_ptr + dict_start + FAST_COPY_SIZE, length - FAST_COPY_SIZE);
         }
 
         size += length;
@@ -81,7 +81,7 @@ const char* SampledBPECompressor::name() const {
     return "Sampled BPE";
 }
 
-LongestPrefixMatcher<uint16_t> SampledBPECompressor::train(const uint8_t* data, const std::vector<size_t>& end_positions) {
+LongestPrefixMatcher<uint16_t> SampledBPECompressor::train_dictionary(const uint8_t* data, const std::vector<size_t>& end_positions) {
     LongestPrefixMatcher<uint16_t> lpm;
 
     // Initialize the dictionary with single-byte tokens
@@ -228,7 +228,7 @@ LongestPrefixMatcher<uint16_t> SampledBPECompressor::train(const uint8_t* data, 
     return std::move(lpm);
 }
 
-void SampledBPECompressor::parse(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm) {
+void SampledBPECompressor::parse_data(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm) {
     offsets.push_back(0);
 
     for(int i=0; i<end_positions.size()-1; i++) {
@@ -256,18 +256,14 @@ void SampledBPECompressor::parse(const uint8_t* data, const std::vector<size_t>&
     }
 }
 
-std::pair<std::vector<uint8_t>, std::vector<size_t>> SampledBPECompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size){
+std::pair<std::vector<uint8_t>, std::vector<size_t>> SampledBPECompressor::sampling(const uint8_t* data, const std::vector<size_t>& end_positions, const size_t sample_size, const size_t seed){
     std::vector<uint8_t> sampled_data;
     std::vector<size_t> sampled_end_positions;
 
     size_t n = end_positions.size() - 1;
-    std::vector<size_t> sampled_indices;
 
-    for (size_t i=0; i<n; i++) {
-        sampled_indices.push_back(i);
-    }
-
-    size_t seed = 42;
+    std::vector<int> sampled_indices(n);
+    std::iota(sampled_indices.begin(), sampled_indices.end(), 0);
     std::mt19937 g(seed);
     std::shuffle(sampled_indices.begin(), sampled_indices.end(), g);
 
