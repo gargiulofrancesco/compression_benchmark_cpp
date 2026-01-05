@@ -20,9 +20,9 @@ MSMARCO_QUERIES_OUTPUT = "query_logs.json"
 MSMARCO_URLS_URL = "https://msmarco.z22.web.core.windows.net/msmarcoranking/msmarco-docs.tsv.gz"
 MSMARCO_URLS_OUTPUT = "urls.json"
 
-# Dataset 3: Amazon Book Titles
-AMAZON_BOOKS_URL = "https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Books.jsonl.gz"
-AMAZON_BOOKS_OUTPUT = "book_titles.json"
+# Dataset 3: Amazon Product Titles
+AMAZON_PRODUCTS_URL = "https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Books.jsonl.gz"
+AMAZON_PRODUCTS_OUTPUT = "amazon.json"
 
 # Dataset 4: DBpedia Abstracts
 DBPEDIA_URL = "https://databus.dbpedia.org/dbpedia/text/short-abstracts/2022.12.01/short-abstracts_lang=en.ttl.bz2"
@@ -150,19 +150,18 @@ def process_msmarco_urls():
             print(f"  Cleaning up: Removing {temp_archive_path}")
             os.remove(temp_archive_path)
 
-def process_amazon_titles():
-    output_path = os.path.join(DATA_DIR, AMAZON_BOOKS_OUTPUT)
+def process_amazon_products():
+    output_path = os.path.join(DATA_DIR, AMAZON_PRODUCTS_OUTPUT)
     
     if os.path.exists(output_path):
-        print(f"[Skip] {AMAZON_BOOKS_OUTPUT} already exists.")
+        print(f"[Skip] {AMAZON_PRODUCTS_OUTPUT} already exists.")
         return
 
-    print(f"\n[3/4] Processing Amazon Book Titles...")
-    temp_archive_path = os.path.join(DATA_DIR, "temp_amazon_books.jsonl.gz")
-
+    print(f"\n[3/4] Processing Amazon Product Titles...")
+    temp_archive_path = os.path.join(DATA_DIR, "temp_amazon_products.jsonl.gz")
     try:
         # Download
-        download_to_file(AMAZON_BOOKS_URL, temp_archive_path, desc="  Fetching Amazon Metadata")
+        download_to_file(AMAZON_PRODUCTS_URL, temp_archive_path, desc="  Fetching Amazon Metadata")
 
         titles = []
         
@@ -262,8 +261,8 @@ def main():
     # 2. URLs
     process_msmarco_urls()
     
-    # 3. Amazon Titles
-    process_amazon_titles()
+    # 3. Amazon Product Titles
+    process_amazon_products()
 
     # 4. DBpedia
     process_dbpedia_abstracts()

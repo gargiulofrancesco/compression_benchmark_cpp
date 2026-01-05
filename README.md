@@ -104,8 +104,8 @@ Compare the training efficiency (latency and compression ratio) of OnPair and Sa
 
 **Example:**
 ```bash
-# Run efficiency analysis on book titles
-./dictionary_efficiency data/book_titles.json 0
+# Run efficiency analysis on the Amazon dataset
+./dictionary_efficiency data/amazon.json 0
 ```
 
 This tool runs a series of experiments varying the OnPair frequency threshold (2-15) and compares it against Sampled BPE using the exact same sample size. It outputs a table showing sample size, training time, and compression ratio for both methods.
