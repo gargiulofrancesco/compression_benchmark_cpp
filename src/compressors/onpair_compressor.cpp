@@ -3,6 +3,7 @@
 #include <robin_hood.h>
 #include <random>
 #include <numeric>
+#include <algorithm>
 
 OnPairCompressor::OnPairCompressor(size_t data_size, size_t n_elements) {
     compressed_data.reserve(data_size);
@@ -203,4 +204,160 @@ std::vector<int> OnPairCompressor::generate_random_permutation(const size_t n_el
     std::shuffle(shuffled_indices.begin(), shuffled_indices.end(), g);
 
     return shuffled_indices;
+}
+
+LongestPrefixMatcher<uint16_t> OnPairCompressor::sort_dictionary() {
+    std::vector<std::vector<uint8_t>> tokens;
+    size_t num_tokens = token_boundaries.size() - 1;
+    tokens.reserve(num_tokens);
+
+    for (size_t i = 0; i < num_tokens; ++i) {
+        size_t start = token_boundaries[i];
+        size_t end = token_boundaries[i+1];
+        tokens.emplace_back(dictionary.begin() + start, dictionary.begin() + end);
+    }
+
+    std::sort(tokens.begin(), tokens.end());
+
+    // Rebuild dictionary and LPM
+    dictionary.clear();
+    token_boundaries.clear();
+    token_boundaries.push_back(0);
+    
+    LongestPrefixMatcher<uint16_t> lpm;
+    
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        const auto& token = tokens[i];
+        dictionary.insert(dictionary.end(), token.begin(), token.end());
+        token_boundaries.push_back(dictionary.size());
+        lpm.insert(token.data(), token.size(), static_cast<uint16_t>(i));
+    }
+
+    return std::move(lpm);
+}
+
+uint32_t OnPairCompressor::lower_bound(const std::vector<uint8_t>& target) const {
+    size_t left = 0;
+    size_t right = token_boundaries.size() - 1; // Number of tokens
+    
+    std::string_view target_sv(reinterpret_cast<const char*>(target.data()), target.size());
+
+    while (left < right) {
+        size_t mid = left + (right - left) / 2;
+        
+        // Reconstruct token string_view
+        size_t start = token_boundaries[mid];
+        size_t len = token_boundaries[mid+1] - start;
+        std::string_view token_sv(reinterpret_cast<const char*>(dictionary.data() + start), len);
+        
+        if (token_sv < target_sv) {
+            left = mid + 1;
+        } else {
+            right = mid;
+        }
+    }
+    return static_cast<uint32_t>(left);
+}
+
+// Warning: Requires the underlying dictionary to be sorted lexicographically
+size_t OnPairCompressor::prefix_search(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const {    
+    // 1. Parse prefix into tokens
+    std::vector<uint16_t> query_tokens;
+    size_t pos = 0;
+    while (pos < prefix.size()) {
+        auto match = lpm.find_longest_match(prefix.data() + pos, prefix.size() - pos);
+        query_tokens.push_back(match->first);
+        pos += match->second;
+    }
+
+    size_t q_len = query_tokens.size();
+
+    // 2. Precompute intervals
+    std::vector<std::pair<uint32_t, uint32_t>> intervals;
+    intervals.reserve(q_len);
+    
+    size_t current_pos = 0;
+    std::vector<uint8_t> temp_suffix;
+    temp_suffix.reserve(prefix.size());
+    for (size_t i = 0; i < q_len; ++i) {
+        // Reconstruct suffix: prefix[current_pos...]
+       temp_suffix.assign(prefix.begin() + current_pos, prefix.end());
+        
+        // Find Lower Bound (Start of range)
+        uint32_t start_idx = lower_bound(temp_suffix);
+        
+        // Find Upper Bound (Start of next lexical prefix)
+        // Logic: Increment the last byte. If it overflows (255), pop and carry.
+        bool valid_next = false;
+        while (!temp_suffix.empty()) {
+            if (temp_suffix.back() < 255) {
+                temp_suffix.back()++;
+                valid_next = true;
+                break;
+            } else {
+                temp_suffix.pop_back();
+            }
+        }
+        
+        uint32_t end_idx;
+        if (valid_next) {
+            end_idx = lower_bound(temp_suffix);
+        } else {
+            end_idx = static_cast<uint32_t>(token_boundaries.size() - 1);
+        }
+        
+        intervals.emplace_back(start_idx, end_idx);
+        
+        // Advance position by length of current token
+        size_t t_start = token_boundaries[query_tokens[i]];
+        size_t t_end = token_boundaries[query_tokens[i]+1];
+        current_pos += (t_end - t_start);
+    }
+
+    // 3. Scan
+    size_t match_count = 0;
+    size_t n_items = string_boundaries.size() - 1;
+
+    const uint16_t* compressed_ptr = compressed_data.data();
+    const size_t* boundaries_ptr = string_boundaries.data();
+    
+    for (size_t i = 0; i < n_items; ++i) {
+        size_t start = boundaries_ptr[i];
+        size_t end = boundaries_ptr[i+1];
+        size_t item_len = end - start;
+
+        bool match_found = true;
+
+        // Prefix scan
+        for (size_t j = 0; j < q_len; ++j) {
+            if (j >= item_len) {
+                match_found = false;
+                break;
+            }
+
+            const uint16_t item_token = compressed_ptr[start + j];
+            const uint16_t q_token = query_tokens[j];
+
+            if (item_token == q_token) {
+                continue;
+            }
+
+            // Divergence: interval check
+            const auto& interval = intervals[j];
+            if (item_token >= interval.first && item_token < interval.second) {
+                // Valid prefix match via interval
+                break;
+            }
+
+            // Hard mismatch
+            match_found = false;
+            break;
+        }
+
+        if (match_found) {
+            buffer[match_count++] = i;
+        }
+    }
+    
+    return match_count;
 }

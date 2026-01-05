@@ -35,6 +35,11 @@ public:
     std::pair<LongestPrefixMatcher<uint16_t>, size_t> train_dictionary(const uint8_t* data, const std::vector<size_t>& end_positions, const std::vector<int>& shuffled_indices);
     void parse_data(const uint8_t* data, const std::vector<size_t>& end_positions, const LongestPrefixMatcher<uint16_t>& lpm);
     std::vector<int> generate_random_permutation(const size_t n_elements);
+    
+    // Prefix filtering methods
+    LongestPrefixMatcher<uint16_t> sort_dictionary();
+    uint32_t lower_bound(const std::vector<uint8_t>& target) const;
+    size_t prefix_search(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const;
 };
 
 #endif // ONPAIR_COMPRESSOR_H

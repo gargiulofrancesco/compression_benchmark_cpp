@@ -50,8 +50,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Load dataset
     std::string dataset_name = std::filesystem::path(dataset_path).filename().string();
-
     std::vector<uint8_t> data;
     std::vector<size_t> end_positions;
 
