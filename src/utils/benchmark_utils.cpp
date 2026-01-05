@@ -143,13 +143,13 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
     for (const auto& [key, group] : grouped_results) {
         const auto& [compressor, dataset] = key;
         size_t len = group.size();
-        double avg_compression_rate = 0, avg_compression_speed = 0, avg_decompression_speed = 0, avg_average_random_access_time = 0;
+        double avg_compression_rate = 0, avg_compression_speed = 0, avg_decompression_speed = 0, avg_random_access_time = 0;
 
         for (const auto& result : group) {
             avg_compression_rate += result.compression_rate;
             avg_compression_speed += result.compression_speed;
             avg_decompression_speed += result.decompression_speed;
-            avg_average_random_access_time += result.average_random_access_time;
+            avg_random_access_time += result.average_random_access_time;
         }
 
         BenchmarkResult averaged_result = {
@@ -158,7 +158,7 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
             avg_compression_rate / len,
             avg_compression_speed / len,
             avg_decompression_speed / len,
-            avg_average_random_access_time / len
+            static_cast<size_t>(avg_random_access_time / len)
         };
         compressor_groups[compressor].push_back(averaged_result);
     }
@@ -181,7 +181,7 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
             overall_avg_compression_rate / len,
             overall_avg_compression_speed / len,
             overall_avg_decompression_speed / len,
-            overall_avg_random_access_time / len
+            static_cast<size_t>(overall_avg_random_access_time / len)
         };
     }
 
