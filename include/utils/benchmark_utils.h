@@ -86,6 +86,27 @@ void append_benchmark_result(const BenchmarkResult& result, const std::filesyste
 void print_benchmark_results(const std::vector<BenchmarkResult>& results);
 
 /**
+ * Determines parameters for OnPair compression to ensure fair comparison.
+ * 
+ * To compare OnPair and Sampled BPE fairly, we want both algorithms to use 
+ * the same sample for dictionary training.
+ * 
+ * OnPair's training data size depends on its frequency threshold:
+ * - Higher threshold -> slower dictionary filling -> more data processed
+ * - Lower threshold -> faster dictionary filling -> less data processed
+ * 
+ * This function iterates through possible thresholds to find one that results
+ * in a training sample size closest to target_sample_size (e.g., 10% of the dataset).
+ * The resulting sample size can then used to configure Sampled BPE.
+ */
+std::pair<size_t, size_t> find_onpair_params(
+    const std::vector<uint8_t>& data,
+    const std::vector<size_t>& end_positions,
+    const size_t target_sample_size,
+    const size_t seed
+);
+
+/**
  * Attempts to set CPU affinity for reproducible measurements
  * 
  * Tries to bind the current process to a specific CPU core to reduce

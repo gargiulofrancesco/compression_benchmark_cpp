@@ -36,7 +36,7 @@
 const size_t N_QUERIES = 1000000;
 
 // Fixed seed and target sample fraction for dictionary training (OnPair and Sampled BPE)
-const size_t SEED = 42;
+const size_t SAMPLING_SEED = 42;
 const float TARGET_SAMPLE_FRACTION = 0.1f;
 
 /**
@@ -164,55 +164,6 @@ void warmup(const std::string& dataset_name,
     }
 }
 
-/**
- * Determines optimal parameters for OnPair compression to ensure fair comparison.
- * 
- * To compare OnPair and Sampled BPE fairly, we want both algorithms to use 
- * the same sample for dictionary training.
- * 
- * OnPair's training data size depends on its frequency threshold:
- * - Higher threshold -> slower dictionary filling -> more data processed
- * - Lower threshold -> faster dictionary filling -> less data processed
- * 
- * This function iterates through possible thresholds to find one that results
- * in a training sample size closest to TARGET_SAMPLE_FRACTION (e.g., 10%) of the dataset.
- * The resulting sample size is then used to configure Sampled BPE.
- */
-std::pair<size_t, size_t> find_onpair_params(
-    const std::vector<uint8_t>& data,
-    const std::vector<size_t>& end_positions
-) {
-    size_t n_elements = end_positions.size() - 1;
-    size_t data_size = end_positions.back();
-    size_t target_sample_size = static_cast<size_t>(data_size * TARGET_SAMPLE_FRACTION);
-
-    size_t threshold = 2;
-    size_t prev_sample_size = 0;
-    while (true) {
-        OnPairCompressor onpair(data_size, n_elements);
-        onpair.set_seed(SEED);
-        onpair.set_threshold(threshold);
-        auto permutation = onpair.generate_random_permutation(n_elements);
-        auto [_, sample_size] = onpair.train_dictionary(data.data(), end_positions, permutation);
-
-        if (sample_size >= target_sample_size) {
-            if(threshold == 2) {
-                return {threshold, sample_size};
-            }
-            size_t diff_curr = sample_size - target_sample_size;
-            size_t diff_prev = target_sample_size - prev_sample_size;
-            if (diff_prev < diff_curr) {
-                return {threshold - 1, prev_sample_size};
-            } else {
-                return {threshold, sample_size};
-            }
-        }
-
-        prev_sample_size = sample_size;
-        threshold++;
-    }
-}
-
 // Individual benchmark execution entry point
 int main(int argc, char* argv[]) {
     if (argc < 4) {
@@ -307,9 +258,10 @@ int main(int argc, char* argv[]) {
         }
         else if (compressor_name == "onpair") {
             warmup<OnPairCompressor>(dataset_name, data, end_positions, queries);
-            auto [threshold, _] = find_onpair_params(data, end_positions);
+            size_t target_sample_size = static_cast<size_t>(data.size() * TARGET_SAMPLE_FRACTION);
+            auto [threshold, _] = find_onpair_params(data, end_positions, target_sample_size, SAMPLING_SEED);
             OnPairCompressor compressor = OnPairCompressor::create(data.size(), end_positions.size()-1);
-            compressor.set_seed(SEED);
+            compressor.set_seed(SAMPLING_SEED);
             compressor.set_threshold(threshold);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
@@ -325,9 +277,10 @@ int main(int argc, char* argv[]) {
         }
         else if (compressor_name == "sampled_bpe") {
             warmup<SampledBPECompressor>(dataset_name, data, end_positions, queries);
-            auto [_, sample_size] = find_onpair_params(data, end_positions);
+            size_t target_sample_size = static_cast<size_t>(data.size() * TARGET_SAMPLE_FRACTION);
+            auto [_, sample_size] = find_onpair_params(data, end_positions, target_sample_size, SAMPLING_SEED);
             SampledBPECompressor compressor = SampledBPECompressor::create(data.size(), end_positions.size()-1);
-            compressor.set_seed(SEED);
+            compressor.set_seed(SAMPLING_SEED);
             compressor.set_sample_size(sample_size);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }

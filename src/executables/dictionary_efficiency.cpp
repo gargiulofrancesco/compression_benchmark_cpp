@@ -22,7 +22,7 @@
 #include "sampled_bpe_compressor.h"
 #include "benchmark_utils.h"
 
-const int SEED = 42;
+const int SAMPLING_SEED = 42;
 const int MAX_THRESHOLD = 15;
 
 int main(int argc, char* argv[]) {
@@ -74,8 +74,8 @@ int main(int argc, char* argv[]) {
     SampledBPECompressor sampled_bpe_warmup(data_size, n_elements);
 
     // Set fixed seed for permutation
-    onpair_warmup.set_seed(SEED);
-    sampled_bpe_warmup.set_seed(SEED);
+    onpair_warmup.set_seed(SAMPLING_SEED);
+    sampled_bpe_warmup.set_seed(SAMPLING_SEED);
 
     // Generate permutation for the full dataset with fixed seed
     std::vector<int> permutation = onpair_warmup.generate_random_permutation(n_elements);
@@ -109,9 +109,9 @@ int main(int argc, char* argv[]) {
         OnPairCompressor onpair(data_size, n_elements);
         SampledBPECompressor sampled_bpe(data_size, n_elements);
 
-        // Set fixed seed for permutation
-        onpair.set_seed(SEED);
-        sampled_bpe.set_seed(SEED);
+        // Use the same fixed seed to train both algorithms on the same sample
+        onpair.set_seed(SAMPLING_SEED);
+        sampled_bpe.set_seed(SAMPLING_SEED);
 
         // Set threshold for OnPair
         onpair.set_threshold(threshold);
@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         double onpair_ratio = static_cast<double>(data_size) / static_cast<double>(onpair_size);
 
         // --- Sampled BPE ---
-        // Generate sample using the same sample as OnPair
+        // Generate the same sample used by OnPair
         sampled_bpe.set_sample_size(onpair_sample_size);
         auto [sampled_data, sampled_end_positions] = sampled_bpe.sampling(data.data(), end_positions);
 

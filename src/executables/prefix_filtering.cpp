@@ -29,9 +29,14 @@
 #include "benchmark_utils.h"
 #include "onpair_compressor.h"
 
-const int SEED = 42;
-const int N_QUERIES = 10000;
+// Queries configuration
+const int N_QUERIES = 100;
+const int QUERIES_SEED = 123;
 const std::vector<int> PREFIXES = {4, 8, 12, 16};
+
+// Fixed seed and target sample fraction for OnPair's dictionary training
+const size_t SAMPLING_SEED = 42;
+const float TARGET_SAMPLE_FRACTION = 0.1f;
 
 /**
  * Generates queries using stratified sampling based on prefix selectivity.
@@ -48,7 +53,7 @@ std::vector<std::vector<uint8_t>> generate_stratified_queries(
     size_t prefix_size,
     size_t n_queries_target
 ) {
-    std::mt19937 rng(SEED); 
+    std::mt19937 rng(QUERIES_SEED); 
 
     // --- Step 1: Extract and Index All Valid Prefixes ---
     std::map<std::vector<uint8_t>, size_t> prefix_counts;
@@ -219,7 +224,14 @@ int main(int argc, char* argv[]) {
 
     // Prepare OnPair compressor for prefix filtering
     OnPairCompressor onpair(data_size, n_elements);
-    onpair.train_dictionary(data.data(), end_positions, onpair.generate_random_permutation(n_elements));
+
+    size_t target_sample_size = static_cast<size_t>(data.size() * TARGET_SAMPLE_FRACTION);
+    auto [threshold, _] = find_onpair_params(data, end_positions, target_sample_size, SAMPLING_SEED);
+    onpair.set_seed(SAMPLING_SEED);
+    onpair.set_threshold(threshold);
+    auto permutation = onpair.generate_random_permutation(n_elements);
+
+    onpair.train_dictionary(data.data(), end_positions, permutation);
     auto lpm = onpair.sort_dictionary();
     onpair.parse_data(data.data(), end_positions, lpm);
 

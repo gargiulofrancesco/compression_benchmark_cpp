@@ -1,4 +1,5 @@
 #include "benchmark_utils.h"
+#include "onpair_compressor.h"
 #include <fstream>
 #include <map>
 #include <stdexcept>
@@ -209,6 +210,42 @@ void print_benchmark_results(const std::vector<BenchmarkResult>& results) {
                   << std::setw(24) << std::fixed << std::setprecision(2) << avg_result.compression_speed
                   << std::setw(24) << std::fixed << std::setprecision(2) << avg_result.decompression_speed
                   << std::setw(24) << std::fixed << std::setprecision(0) << avg_result.average_random_access_time << "\n";
+    }
+}
+
+std::pair<size_t, size_t> find_onpair_params(
+    const std::vector<uint8_t>& data,
+    const std::vector<size_t>& end_positions,
+    const size_t target_sample_size,
+    const size_t seed
+) {
+    size_t n_elements = end_positions.size() - 1;
+    size_t data_size = end_positions.back();
+
+    size_t threshold = 2;
+    size_t prev_sample_size = 0;
+    while (true) {
+        OnPairCompressor onpair(data_size, n_elements);
+        onpair.set_seed(seed);
+        onpair.set_threshold(threshold);
+        auto permutation = onpair.generate_random_permutation(n_elements);
+        auto [_, sample_size] = onpair.train_dictionary(data.data(), end_positions, permutation);
+
+        if (sample_size >= target_sample_size) {
+            if(threshold == 2) {
+                return {threshold, sample_size};
+            }
+            size_t diff_curr = sample_size - target_sample_size;
+            size_t diff_prev = target_sample_size - prev_sample_size;
+            if (diff_prev < diff_curr) {
+                return {threshold - 1, prev_sample_size};
+            } else {
+                return {threshold, sample_size};
+            }
+        }
+
+        prev_sample_size = sample_size;
+        threshold++;
     }
 }
 
