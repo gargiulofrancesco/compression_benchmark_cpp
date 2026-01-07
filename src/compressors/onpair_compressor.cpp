@@ -361,3 +361,23 @@ size_t OnPairCompressor::prefix_search(const LongestPrefixMatcher<uint16_t>& lpm
     
     return match_count;
 }
+
+std::vector<OnPairCompressor::TokenStats> OnPairCompressor::get_token_statistics() const {
+    size_t num_tokens = token_boundaries.size() - 1;
+    std::vector<size_t> frequencies(num_tokens, 0);
+
+    for (uint16_t token_id : compressed_data) {
+        frequencies[token_id]++;
+    }
+
+    std::vector<TokenStats> stats;
+    stats.reserve(num_tokens); 
+
+    const uint32_t* offsets_ptr = token_boundaries.data();
+    for (size_t id = 0; id < num_tokens; ++id) {
+        size_t len = offsets_ptr[id + 1] - offsets_ptr[id];
+        stats.push_back({static_cast<uint16_t>(id), frequencies[id], len});
+    }
+
+    return stats;
+}
