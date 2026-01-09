@@ -134,7 +134,7 @@ public:
      * @param length Length of input data in bytes
      * @return Optional pair of (token_id, match_length) if match found, nullopt otherwise
      */
-    std::optional<std::pair<V, size_t>> find_longest_match(const uint8_t* data, size_t length) const {
+    inline std::optional<std::pair<V, size_t>> find_longest_match(const uint8_t* data, size_t length) const {
         // Phase 1: Long pattern search (>8 bytes) - check longest matches first
         if (length > TRIE_PREFIX_LEN) {
             uint64_t prefix = bytes_to_u64_le(data, TRIE_PREFIX_LEN);

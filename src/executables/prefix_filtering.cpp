@@ -155,16 +155,17 @@ size_t linear_scan_prefix_filtering(
 
     for (size_t i = 0; i < n_strings; ++i) {
         size_t start = end_positions[i];
-        size_t len = end_positions[i+1] - start;
+        size_t len = end_positions[i + 1] - start;
 
-        // Length Filter (Fail Fast)
+        // Length Filter
         if (len < p_len) continue;
 
         // Memcmp Comparison
-        if (std::memcmp(&data[start], p_data, p_len) == 0) {
-            buffer[count++] = i; // Materialize ID
-        }
+        bool match = std::memcmp(&data[start], p_data, p_len) == 0;
+        buffer[count] = i;
+        count += match ? 1 : 0;
     }
+
     return count;
 }
 

@@ -4,7 +4,7 @@
 #include <algorithm>
 
 FSSTBlockCompressor::FSSTBlockCompressor(size_t data_size, size_t n_elements) {
-    compressed_data.resize(data_size);
+    compressed_data.resize(data_size + 1024);
     offsets.reserve(n_elements);
 }
 

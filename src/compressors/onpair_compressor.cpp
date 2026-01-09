@@ -274,7 +274,7 @@ size_t OnPairCompressor::prefix_search(const LongestPrefixMatcher<uint16_t>& lpm
 
     // 2. Precompute intervals
     std::vector<std::pair<uint32_t, uint32_t>> intervals;
-    intervals.reserve(q_len);
+    intervals.reserve(q_len + 1);
     
     size_t current_pos = 0;
     std::vector<uint8_t> temp_suffix;
@@ -314,49 +314,38 @@ size_t OnPairCompressor::prefix_search(const LongestPrefixMatcher<uint16_t>& lpm
         current_pos += (t_end - t_start);
     }
 
+    // Push a "Universal Interval" that accepts any token
+    intervals.emplace_back(0, std::numeric_limits<uint32_t>::max());
+
     // 3. Scan
     size_t match_count = 0;
     size_t n_items = string_boundaries.size() - 1;
-
-    const uint16_t* compressed_ptr = compressed_data.data();
+    const uint16_t* compressed_base = compressed_data.data();
     const size_t* boundaries_ptr = string_boundaries.data();
-    
+    const uint16_t* query_begin = query_tokens.data();
+
     for (size_t i = 0; i < n_items; ++i) {
         size_t start = boundaries_ptr[i];
-        size_t end = boundaries_ptr[i+1];
-        size_t item_len = end - start;
+        size_t end = boundaries_ptr[i + 1];
+        size_t doc_len = end - start;
+        size_t min_len = doc_len < q_len ? doc_len : q_len;
+        const uint16_t* doc_begin = compressed_base + start;
 
-        bool match_found = true;
+        // Find mismatch index
+        auto [doc_iter, query_iter] = std::mismatch(doc_begin, doc_begin + min_len, query_begin);
+        size_t diff_idx = query_iter - query_begin; 
 
-        // Prefix scan
-        for (size_t j = 0; j < q_len; ++j) {
-            if (j >= item_len) {
-                match_found = false;
-                break;
-            }
+        // Handle fully-matching document that is shorter than query
+        bool valid_doc = doc_len >= q_len || diff_idx != doc_len;
 
-            const uint16_t item_token = compressed_ptr[start + j];
-            const uint16_t q_token = query_tokens[j];
+        // Check for valid divergence
+        const auto& interval = intervals[diff_idx];
+        uint16_t token = doc_begin[diff_idx];
+        bool valid_divergence = token >= interval.first && token < interval.second;
 
-            if (item_token == q_token) {
-                continue;
-            }
-
-            // Divergence: interval check
-            const auto& interval = intervals[j];
-            if (item_token >= interval.first && item_token < interval.second) {
-                // Valid prefix match via interval
-                break;
-            }
-
-            // Hard mismatch
-            match_found = false;
-            break;
-        }
-
-        if (match_found) {
-            buffer[match_count++] = i;
-        }
+        // Update matches
+        buffer[match_count] = i;
+        match_count += (valid_doc && valid_divergence) ? 1 : 0;
     }
     
     return match_count;

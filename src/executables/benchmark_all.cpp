@@ -22,10 +22,6 @@
 
 // Compression algorithms under evaluation
 const std::vector<std::string> COMPRESSORS = {"raw", "onpair", "sampled_bpe", "bpe", "fsst", "lz4", "zstd"};
-// Path to individual benchmark executable
-const std::string BENCHMARK_PATH = "./benchmark_individual";
-// Output file for aggregated benchmark results
-const std::string OUTPUT_FILE = "benchmark_results.json";
 // Number of iterations per algorithm-dataset combination for statistical robustness
 const size_t N_ITERATIONS = 15;
 
@@ -37,6 +33,11 @@ const size_t N_ITERATIONS = 15;
  * independent measurements to ensure statistical significance.
  */
 int main(int argc, char* argv[]) {
+    // Determine path to benchmark_individual executable relative to this binary
+    std::filesystem::path self_path = std::filesystem::read_symlink("/proc/self/exe");
+    std::string BENCHMARK_PATH = (self_path.parent_path() / "benchmark_individual").string();
+    std::string OUTPUT_FILE = (self_path.parent_path() / "benchmark_results.json").string();
+
     // Parse command-line arguments: dataset directory and optional CPU core ID
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <directory> [core_id]\n";
