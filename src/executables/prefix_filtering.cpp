@@ -242,7 +242,7 @@ int main(int argc, char* argv[]) {
         auto warm_queries = generate_stratified_queries(data, end_positions, 4, 100);
         for(const auto& q : warm_queries) {
             size_t count_base = linear_scan_prefix_filtering(data, end_positions, q, warm_buf.data());
-            size_t count_onpair = onpair.prefix_search(lpm, q, warm_buf.data());
+            size_t count_onpair = onpair.prefix_filtering(lpm, q, warm_buf.data());
             if (count_base != count_onpair) {
                 std::cerr << "\n[FATAL] Warmup Count mismatch! Base=" << count_base << " OnPair=" << count_onpair << std::endl;
                 exit(1);
@@ -270,7 +270,7 @@ int main(int argc, char* argv[]) {
 
             // 2. Measure OnPair
             auto t2 = std::chrono::high_resolution_clock::now();
-            size_t count_onpair = onpair.prefix_search(lpm, q, buffer_onpair.data());
+            size_t count_onpair = onpair.prefix_filtering(lpm, q, buffer_onpair.data());
             auto t3 = std::chrono::high_resolution_clock::now();
             total_onpair_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2).count();
 

@@ -260,7 +260,7 @@ uint32_t OnPairCompressor::lower_bound(const std::vector<uint8_t>& target) const
 }
 
 // Warning: Requires the underlying dictionary to be sorted lexicographically
-size_t OnPairCompressor::prefix_search(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const {    
+size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const {    
     // 1. Parse prefix into tokens
     std::vector<uint16_t> query_tokens;
     size_t pos = 0;
