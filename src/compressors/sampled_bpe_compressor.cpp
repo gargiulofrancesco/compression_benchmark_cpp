@@ -4,8 +4,6 @@
 #include "sampled_bpe_compressor.h"
 #include "pair_hash.h"
 #include "bitvector.h"
-#include <iostream>
-#include <chrono>
 
 using Pair = std::pair<uint16_t, uint16_t>;
 

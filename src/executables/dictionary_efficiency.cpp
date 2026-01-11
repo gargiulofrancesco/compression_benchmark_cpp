@@ -98,9 +98,11 @@ int main(int argc, char* argv[]) {
               << std::setw(12) << "Threshold" 
               << std::setw(22) << "Sample Size (B)" 
               << std::setw(12) << "Sample %"
-              << std::setw(22) << "OnPair Time (s)" 
+              << std::setw(22) << "OnPair Training (s)" 
+              << std::setw(22) << "OnPair Parsing (s)" 
               << std::setw(18) << "OnPair Ratio" 
-              << std::setw(22) << "BPE Time (s)" 
+              << std::setw(22) << "BPE Training (s)" 
+              << std::setw(22) << "BPE Parsing (s)" 
               << std::setw(18) << "BPE Ratio" 
               << std::endl;
 
@@ -118,13 +120,16 @@ int main(int argc, char* argv[]) {
 
         // --- OnPair ---
         // Measure OnPair training time
-        auto start_onpair = std::chrono::high_resolution_clock::now();
+        auto start_onpair_training = std::chrono::high_resolution_clock::now();
         auto [lpm_onpair, onpair_sample_size] = onpair.train_dictionary(data.data(), end_positions, permutation);
-        auto end_onpair = std::chrono::high_resolution_clock::now();
-        double onpair_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_onpair - start_onpair).count();
+        auto end_onpair_training = std::chrono::high_resolution_clock::now();
+        double onpair_training_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_onpair_training - start_onpair_training).count();
 
         // Measure OnPair compression ratio
+        auto start_onpair_parsing = std::chrono::high_resolution_clock::now();
         onpair.parse_data(data.data(), end_positions, lpm_onpair);
+        auto end_onpair_parsing = std::chrono::high_resolution_clock::now();
+        double onpair_parsing_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_onpair_parsing - start_onpair_parsing).count();
         size_t onpair_size = onpair.space_used_bytes();
         double onpair_ratio = static_cast<double>(data_size) / static_cast<double>(onpair_size);
 
@@ -134,13 +139,16 @@ int main(int argc, char* argv[]) {
         auto [sampled_data, sampled_end_positions] = sampled_bpe.sampling(data.data(), end_positions);
 
         // Measure Sampled BPE training time
-        auto start_bpe = std::chrono::high_resolution_clock::now();
+        auto start_bpe_training = std::chrono::high_resolution_clock::now();
         auto lpm_bpe = sampled_bpe.train_dictionary(sampled_data.data(), sampled_end_positions);
-        auto end_bpe = std::chrono::high_resolution_clock::now();
-        double bpe_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_bpe - start_bpe).count();
+        auto end_bpe_training = std::chrono::high_resolution_clock::now();
+        double bpe_training_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_bpe_training - start_bpe_training).count();
 
         // Measure Sampled BPE compression ratio
+        auto start_bpe_parsing = std::chrono::high_resolution_clock::now();
         sampled_bpe.parse_data(data.data(), end_positions, lpm_bpe);
+        auto end_bpe_parsing = std::chrono::high_resolution_clock::now();
+        double bpe_parsing_time = std::chrono::duration_cast<std::chrono::duration<double>>(end_bpe_parsing - start_bpe_parsing).count();
         size_t bpe_size = sampled_bpe.space_used_bytes();
         double bpe_ratio = static_cast<double>(data_size) / static_cast<double>(bpe_size);
 
@@ -150,9 +158,11 @@ int main(int argc, char* argv[]) {
                   << std::setw(12) << threshold 
                   << std::setw(22) << onpair_sample_size 
                   << std::setw(12) << std::fixed << std::setprecision(2) << sample_percentage
-                  << std::setw(22) << std::fixed << std::setprecision(6) << onpair_time 
+                  << std::setw(22) << std::fixed << std::setprecision(6) << onpair_training_time 
+                  << std::setw(22) << std::fixed << std::setprecision(6) << onpair_parsing_time
                   << std::setw(18) << std::fixed << std::setprecision(4) << onpair_ratio 
-                  << std::setw(22) << std::fixed << std::setprecision(6) << bpe_time 
+                  << std::setw(22) << std::fixed << std::setprecision(6) << bpe_training_time 
+                  << std::setw(22) << std::fixed << std::setprecision(6) << bpe_parsing_time
                   << std::setw(18) << std::fixed << std::setprecision(4) << bpe_ratio 
                   << std::endl;
     }

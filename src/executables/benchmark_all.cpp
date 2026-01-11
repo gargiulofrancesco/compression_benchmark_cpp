@@ -33,8 +33,7 @@ const size_t N_ITERATIONS = 15;
  * independent measurements to ensure statistical significance.
  */
 int main(int argc, char* argv[]) {
-    // Determine path to benchmark_individual executable relative to this binary
-    std::filesystem::path self_path = std::filesystem::read_symlink("/proc/self/exe");
+    std::filesystem::path self_path(argv[0]);
     std::string BENCHMARK_PATH = (self_path.parent_path() / "benchmark_individual").string();
     std::string OUTPUT_FILE = (self_path.parent_path() / "benchmark_results.json").string();
 

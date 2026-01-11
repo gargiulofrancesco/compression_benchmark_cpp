@@ -30,7 +30,7 @@
 #include "onpair_compressor.h"
 
 // Queries configuration
-const int N_QUERIES = 100;
+const int N_QUERIES = 1000;
 const int QUERIES_SEED = 123;
 const std::vector<int> PREFIXES = {4, 8, 12, 16};
 
