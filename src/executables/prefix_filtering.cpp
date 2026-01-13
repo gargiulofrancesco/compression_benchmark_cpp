@@ -4,10 +4,7 @@
  *
  * EVALUATION METHODOLOGY:
  * This benchmark evaluates the retrieval latency of prefix queries using a 
- * synthetic workload generated via Stratified Sampling. The workload consists of:
- * - 1. Positive Queries (50%): Stratified by selectivity (Rare vs. Frequent)
- * - 2. Negative Queries (50%): "Near-miss" prefixes (mutated valid strings) that 
- * do not exist in the datase.
+ * synthetic workload generated via Stratified Sampling. 
  *
  * * METRICS:
  * - Execution Time (ns): Accumulated latency over 10,000 queries.
@@ -41,10 +38,6 @@ const float TARGET_SAMPLE_FRACTION = 0.1f;
 /**
  * Generates queries using stratified sampling based on prefix selectivity.
  *
- * Creates a balanced dataset of:
- * 1. Positive Queries (Hits): Stratified by selectivity (Rare vs. Frequent).
- * 2. Negative Queries (Misses): Mutated prefixes guaranteed NOT to exist.
- *
  * @return A vector of byte-vectors representing the queries.
  */
 std::vector<std::vector<uint8_t>> generate_stratified_queries(
@@ -71,11 +64,8 @@ std::vector<std::vector<uint8_t>> generate_stratified_queries(
         }
     }
 
-    if (unique_prefixes.empty()) return {};
-
-    // --- Step 2: Stratified Sampling for POSITIVE Queries (50% of workload) ---
-    size_t n_positives = n_queries_target / 2;
-    std::vector<std::vector<uint8_t>> positive_queries;
+    // --- Step 2: Stratified Sampling ---
+    std::vector<std::vector<uint8_t>> queries;
 
     std::map<size_t, std::vector<std::vector<uint8_t>>> buckets;
     for (const auto& [prefix, count] : prefix_counts) {
@@ -87,49 +77,25 @@ std::vector<std::vector<uint8_t>> generate_stratified_queries(
 
     // Sample uniformly from buckets to ensure coverage of both Rare and Frequent terms
     if (!buckets.empty()) {
-        size_t queries_per_bucket = std::max(size_t(1), n_positives / buckets.size());
+        size_t queries_per_bucket = std::max(size_t(1), n_queries_target / buckets.size());
         for (auto& [b_idx, p_list] : buckets) {
             std::shuffle(p_list.begin(), p_list.end(), rng);
             size_t take = std::min(p_list.size(), queries_per_bucket);
-            positive_queries.insert(positive_queries.end(), p_list.begin(), p_list.begin() + take);
+            queries.insert(queries.end(), p_list.begin(), p_list.begin() + take);
         }
     }
     
     // Fill remaining spots if bucket sampling didn't reach target
     std::vector<std::vector<uint8_t>> all_valid_list(unique_prefixes.begin(), unique_prefixes.end());
     std::uniform_int_distribution<size_t> dist_idx(0, all_valid_list.size() - 1);
-    while (positive_queries.size() < n_positives) {
-        positive_queries.push_back(all_valid_list[dist_idx(rng)]);
+    while (queries.size() < n_queries_target) {
+        queries.push_back(all_valid_list[dist_idx(rng)]);
     }
 
-    // --- Step 3: Generation of NEGATIVE Queries (50% of workload) ---
-    // We take valid prefixes and mutate the last byte to create realistic "near-misses".
-    size_t n_negatives = n_queries_target - positive_queries.size();
-    std::vector<std::vector<uint8_t>> negative_queries;
-    
-    int attempts = 0;
-    while (negative_queries.size() < n_negatives && attempts < n_queries_target * 5) {
-        // Pick a valid prefix to mutate
-        std::vector<uint8_t> candidate = all_valid_list[dist_idx(rng)];
-        
-        // Mutate last byte (simple heuristic)
-        // We try +1, -1, or random byte to simulate typos or non-existent IDs
-        uint8_t mutation = rng() % 256; 
-        candidate.back() = mutation;
+    // --- Step 3: Shuffle ---
+    std::shuffle(queries.begin(), queries.end(), rng);
 
-        // CRITICAL: Verify it is actually a miss
-        if (unique_prefixes.find(candidate) == unique_prefixes.end()) {
-            negative_queries.push_back(candidate);
-        }
-        attempts++;
-    }
-
-    // --- Step 4: Merge and Shuffle ---
-    std::vector<std::vector<uint8_t>> final_workload = positive_queries;
-    final_workload.insert(final_workload.end(), negative_queries.begin(), negative_queries.end());
-    std::shuffle(final_workload.begin(), final_workload.end(), rng);
-
-    return final_workload;
+    return queries;
 }
 
 /**
@@ -214,7 +180,7 @@ int main(int argc, char* argv[]) {
     // --- Output Header ---
     std::cout << "================================================================================" << std::endl;
     std::cout << "PREFIX FILTERING BENCHMARK" << std::endl;
-    std::cout << "Dataset: " << dataset_name << " | Queries: " << N_QUERIES << " (50% Hits / 50% Misses)" << std::endl;
+    std::cout << "Dataset: " << dataset_name << " | Queries: " << N_QUERIES << std::endl;
     std::cout << "================================================================================" << std::endl;
     std::cout << std::left 
               << std::setw(10) << "Prefix" 
