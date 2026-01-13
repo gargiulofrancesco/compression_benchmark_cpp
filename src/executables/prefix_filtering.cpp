@@ -129,7 +129,7 @@ size_t linear_scan_prefix_filtering(
         // Memcmp Comparison
         bool match = std::memcmp(&data[start], p_data, p_len) == 0;
         buffer[count] = i;
-        count += match ? 1 : 0;
+        count += match;
     }
 
     return count;

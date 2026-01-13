@@ -335,17 +335,21 @@ size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& 
         auto [doc_iter, query_iter] = std::mismatch(doc_begin, doc_begin + min_len, query_begin);
         size_t diff_idx = query_iter - query_begin; 
 
-        // Handle fully-matching document that is shorter than query
-        bool valid_doc = doc_len >= q_len || diff_idx != doc_len;
-
-        // Check for valid divergence
+        const uint16_t token = doc_begin[diff_idx];
         const auto& interval = intervals[diff_idx];
-        uint16_t token = doc_begin[diff_idx];
-        bool valid_divergence = token >= interval.first && token < interval.second;
+
+        // Condition A: Exact Prefix Match
+        bool exact_match = (diff_idx == q_len);
+
+        // Condition B: Valid Divergence
+        bool interval_match = (token >= interval.first) & (token < interval.second);
+        bool not_at_end = (diff_idx < doc_len); // Handle case where doc is shorter than query
+
+        bool is_match = exact_match | (interval_match & not_at_end);
 
         // Update matches
         buffer[match_count] = i;
-        match_count += (valid_doc && valid_divergence) ? 1 : 0;
+        match_count += is_match;
     }
     
     return match_count;
