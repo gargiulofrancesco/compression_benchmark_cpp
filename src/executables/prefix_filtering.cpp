@@ -114,7 +114,7 @@ public:
                 size_t cand_idx = sorted_indices[cand_rank];
                 std::string_view cand_str = getString(cand_idx);
                 size_t common_prefix = computeLCP(pivot_prefix, cand_str);
-                if (common_prefix >= match_threshold) {
+                if (common_prefix >= match_threshold && cand_str.size() >= min_prefix_len) {
                     batch.candidates.push_back(cand_idx);
                 } else {
                     break; // No longer matching
@@ -126,7 +126,7 @@ public:
                 size_t cand_idx = sorted_indices[cand_rank];
                 std::string_view cand_str = getString(cand_idx);
                 size_t common_prefix = computeLCP(pivot_prefix, cand_str);
-                if (common_prefix >= match_threshold) {
+                if (common_prefix >= match_threshold && cand_str.size() >= min_prefix_len) {
                     batch.candidates.push_back(cand_idx);
                 } else {
                     break; // No longer matching
