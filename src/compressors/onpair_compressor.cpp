@@ -264,10 +264,45 @@ uint32_t OnPairCompressor::lower_bound(const uint8_t* target, size_t target_leng
     return left;
 }
 
+std::pair<uint32_t, uint32_t> OnPairCompressor::valid_divergence(const uint8_t* suffix_ptr, size_t suffix_len, uint8_t* buffer) const {
+    uint32_t lb = lower_bound(suffix_ptr, suffix_len);
+    
+    // Find Upper Bound (Start of next lexical prefix)
+    bool overflow = true;
+    size_t next_len = 0;
+    while(suffix_len > 0) {
+        if (suffix_ptr[suffix_len - 1] < 255) {
+            overflow = false;
+            next_len = suffix_len; // Length of the new prefix
+            break;
+        }
+        suffix_len--;
+    }
+
+    uint32_t ub;
+    if(overflow) {
+        // All bytes were 255 (or empty suffix), so we go to the very end of the dictionary
+        ub = static_cast<uint32_t>(token_boundaries.size() - 1);
+    } else{
+        std::memcpy(buffer, suffix_ptr, next_len);            
+        buffer[next_len - 1]++;
+        ub = lower_bound(buffer, next_len);
+    }
+
+    return {lb, ub};
+}
+
 // Warning: Requires the underlying dictionary to be sorted lexicographically
-size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const {    
+size_t OnPairCompressor::prefix_filtering(
+    const LongestPrefixMatcher<uint16_t>& lpm, 
+    const std::vector<uint8_t>& prefix, 
+    const std::vector<size_t>& candidates, 
+    size_t* buffer
+) const {    
     // 1. Parse prefix into tokens
     std::vector<uint16_t> query_tokens;
+    query_tokens.reserve(prefix.size()); 
+
     size_t pos = 0;
     while (pos < prefix.size()) {
         auto match = lpm.find_longest_match(prefix.data() + pos, prefix.size() - pos);
@@ -282,41 +317,21 @@ size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& 
     intervals.reserve(q_len + 1);
     
     size_t current_pos = 0;
-    std::vector<uint8_t> temp_suffix;
-    temp_suffix.reserve(prefix.size());
+
+    std::vector<uint8_t> scratch_buffer;
+    scratch_buffer.resize(prefix.size());
+
     for (size_t i = 0; i < q_len; ++i) {
-        // Reconstruct suffix: prefix[current_pos...]
-       temp_suffix.assign(prefix.begin() + current_pos, prefix.end());
-        
-        // Find Lower Bound (Start of range)
-        uint32_t start_idx = lower_bound(temp_suffix.data(), temp_suffix.size());
-        
-        // Find Upper Bound (Start of next lexical prefix)
-        // Logic: Increment the last byte. If it overflows (255), pop and carry.
-        bool valid_next = false;
-        while (!temp_suffix.empty()) {
-            if (temp_suffix.back() < 255) {
-                temp_suffix.back()++;
-                valid_next = true;
-                break;
-            } else {
-                temp_suffix.pop_back();
-            }
-        }
-        
-        uint32_t end_idx;
-        if (valid_next) {
-            end_idx = lower_bound(temp_suffix.data(), temp_suffix.size());
-        } else {
-            end_idx = static_cast<uint32_t>(token_boundaries.size() - 1);
-        }
-        
-        intervals.emplace_back(start_idx, end_idx);
+        const uint8_t* suffix_ptr = prefix.data() + current_pos;
+        size_t suffix_len = prefix.size() - current_pos;
+
+        auto [lb, ub] = valid_divergence(suffix_ptr, suffix_len, scratch_buffer.data());
+        intervals.emplace_back(lb, ub);
         
         // Advance position by length of current token
         size_t t_start = token_boundaries[query_tokens[i]];
-        size_t t_end = token_boundaries[query_tokens[i]+1];
-        current_pos += (t_end - t_start);
+        size_t t_len = token_boundaries[query_tokens[i] + 1] - t_start;
+        current_pos += t_len;
     }
 
     // Push a "Universal Interval" that accepts any token
@@ -342,23 +357,32 @@ size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& 
         }
 
         const uint16_t token = doc_begin[diff_idx];
-        const auto& interval = intervals[diff_idx];
 
-        // Condition A: Exact Prefix Match
-        bool exact_match = (diff_idx == q_len);
+        // Condition A: Exact Prefix Match (We processed the whole query length)
+        if (diff_idx == q_len) {
+            buffer[match_count++] = idx;
+            continue;
+        }
 
         // Condition B: Valid Divergence
-        bool interval_match = (token >= interval.first) & (token < interval.second);
-        bool not_at_end = (diff_idx < doc_len); // Handle case where doc is shorter than query
-
-        bool is_match = exact_match | (interval_match & not_at_end);
-
-        // Update matches
-        buffer[match_count] = idx;
-        match_count += is_match;
+        // We only check intervals if we are not at the end of the document
+        // (If diff_idx == doc_len, the document ended before the query => mismatch)
+        if (diff_idx < doc_len) {
+            uint16_t token = doc_begin[diff_idx];
+            const auto& [lb, ub] = intervals[diff_idx];
+            
+            if (static_cast<uint16_t>(token - lb) < static_cast<uint16_t>(ub - lb)) {
+                buffer[match_count++] = idx;
+            }
+        }
     }
     
     return match_count;
+}
+
+// Warning: Requires the underlying dictionary to be sorted lexicographically
+size_t OnPairCompressor::prefix_filtering_lazy(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const { 
+    return 0;
 }
 
 std::vector<OnPairCompressor::TokenStats> OnPairCompressor::get_token_statistics() const {
