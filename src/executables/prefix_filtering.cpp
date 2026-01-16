@@ -14,6 +14,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <filesystem>
 #include <random>
 #include <algorithm>
@@ -25,115 +26,147 @@
 #include <set>
 #include "benchmark_utils.h"
 #include "onpair_compressor.h"
+#include "raw_compressor.h"
 
 // Queries configuration
-const int N_QUERIES = 1000;
+const int N_QUERIES = 100;
+const int N_CANDIDATES = 1000;
 const int QUERIES_SEED = 123;
-const std::vector<int> PREFIXES = {4, 8, 12, 16};
 
 // Fixed seed and target sample fraction for OnPair's dictionary training
 const size_t SAMPLING_SEED = 42;
 const float TARGET_SAMPLE_FRACTION = 0.1f;
 
-/**
- * Generates queries using stratified sampling based on prefix selectivity.
- *
- * @return A vector of byte-vectors representing the queries.
- */
-std::vector<std::vector<uint8_t>> generate_stratified_queries(
-    const std::vector<uint8_t>& data,
-    const std::vector<size_t>& end_positions,
-    size_t prefix_size,
-    size_t n_queries_target
-) {
-    std::mt19937 rng(QUERIES_SEED); 
+struct BenchmarkBatch {
+    std::vector<uint8_t> prefix;
+    std::vector<size_t> candidates;
+};
 
-    // --- Step 1: Extract and Index All Valid Prefixes ---
-    std::map<std::vector<uint8_t>, size_t> prefix_counts;
-    std::set<std::vector<uint8_t>> unique_prefixes;
+class QueryGenerator {
+    const std::vector<uint8_t>& data;
+    const std::vector<size_t>& end_positions;
+    std::vector<size_t> sorted_indices; // Permutation of string IDs
+    std::mt19937 rng{QUERIES_SEED};
 
-    size_t n_strings = end_positions.size() - 1;
-    for (size_t i = 0; i < n_strings; ++i) {
-        size_t start = end_positions[i];
-        size_t len = end_positions[i+1] - start;
+public:
+    QueryGenerator(const std::vector<uint8_t>& data, 
+                   const std::vector<size_t>& end_positions)
+        : data(data), end_positions(end_positions) {
         
-        if (len >= prefix_size) {
-            std::vector<uint8_t> prefix(data.begin() + start, data.begin() + start + prefix_size);
-            prefix_counts[prefix]++;
-            unique_prefixes.insert(prefix);
+        // Preprocessing: Sort string indices lexicographically
+        size_t n_strings = end_positions.size() - 1;
+        sorted_indices.resize(n_strings);
+        std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
+
+        std::sort(sorted_indices.begin(), sorted_indices.end(), 
+            [&](size_t a, size_t b) {
+                std::string_view sa = getString(a);
+                std::string_view sb = getString(b);
+                return sa < sb;
+            });
+    }
+
+    /*
+     * Generate a set of benchmark queries.
+     *
+     * Each query consists of:
+     * - A prefix extracted from a randomly selected string in the dataset.
+     * - A set of candidate string indices that share a common prefix with the query.
+     * 
+     * The generation process ensures that each candidate shares at least
+     * `min_prefix_len - 1` bytes with the query prefix. Since we want to include both matches
+     * and mismatches, candidates may differ on the next byte.
+    */
+    std::vector<BenchmarkBatch> generate_queries(
+        size_t n_queries,
+        size_t n_candidates,
+        size_t min_prefix_len
+    ) {
+        std::vector<BenchmarkBatch> result;
+
+        size_t match_threshold = (min_prefix_len > 0) ? min_prefix_len - 1 : 0;
+        
+        size_t n_strings = sorted_indices.size();
+        std::uniform_int_distribution<size_t> dist_idx(0, n_strings - 1);
+
+        // Create a list of all possible ranks to try as pivots
+        std::vector<size_t> pivot_ranks(n_strings);
+        std::iota(pivot_ranks.begin(), pivot_ranks.end(), 0);
+        std::shuffle(pivot_ranks.begin(), pivot_ranks.end(), rng);
+
+        for(auto pivot_rank : pivot_ranks) {
+            if(result.size() >= n_queries) break;
+
+            BenchmarkBatch batch;
+            size_t pivot_idx = sorted_indices[pivot_rank];
+            std::string_view pivot_str = getString(pivot_idx);
+
+            // Check if the Pivot can produce the desired prefix length
+            if (pivot_str.size() < min_prefix_len) {
+                continue;
+            }
+
+            std::string_view pivot_prefix = std::string_view(pivot_str.data(), min_prefix_len);
+            batch.prefix.assign(pivot_prefix.begin(), pivot_prefix.end());
+
+            // Explore candidates upwards
+            for(size_t cand_rank = pivot_rank + 1; cand_rank < n_strings; ++cand_rank) {
+                size_t cand_idx = sorted_indices[cand_rank];
+                std::string_view cand_str = getString(cand_idx);
+                size_t common_prefix = computeLCP(pivot_prefix, cand_str);
+                if (common_prefix >= match_threshold) {
+                    batch.candidates.push_back(cand_idx);
+                } else {
+                    break; // No longer matching
+                }
+            }
+
+            // Explore candidates downwards
+            for(int cand_rank = static_cast<int>(pivot_rank) - 1; cand_rank >= 0; --cand_rank) {
+                size_t cand_idx = sorted_indices[cand_rank];
+                std::string_view cand_str = getString(cand_idx);
+                size_t common_prefix = computeLCP(pivot_prefix, cand_str);
+                if (common_prefix >= match_threshold) {
+                    batch.candidates.push_back(cand_idx);
+                } else {
+                    break; // No longer matching
+                }
+            }
+
+            // Only keep batches with enough candidates
+            if (batch.candidates.size() >= n_candidates) {
+                // Ensure unique candidates if overlaps occurred
+                std::sort(batch.candidates.begin(), batch.candidates.end());
+                batch.candidates.erase(std::unique(batch.candidates.begin(), batch.candidates.end()), batch.candidates.end());
+
+                if (batch.candidates.size() >= n_candidates) {
+                    // Shuffle and trim candidates
+                    std::shuffle(batch.candidates.begin(), batch.candidates.end(), rng);
+                    batch.candidates.resize(n_candidates);
+                    result.push_back(std::move(batch));
+                }
+            }
         }
+
+        return result;
     }
 
-    // --- Step 2: Stratified Sampling ---
-    std::vector<std::vector<uint8_t>> queries;
-
-    std::map<size_t, std::vector<std::vector<uint8_t>>> buckets;
-    for (const auto& [prefix, count] : prefix_counts) {
-        size_t bucket_idx = 0;
-        size_t c = count;
-        while (c >>= 1) bucket_idx++; // log2
-        buckets[bucket_idx].push_back(prefix);
+private:
+    std::string_view getString(size_t index) const {
+        size_t start = end_positions[index];
+        size_t len = end_positions[index+1] - start;
+        return {reinterpret_cast<const char*>(data.data() + start), len};
     }
 
-    // Sample uniformly from buckets to ensure coverage of both Rare and Frequent terms
-    if (!buckets.empty()) {
-        size_t queries_per_bucket = std::max(size_t(1), n_queries_target / buckets.size());
-        for (auto& [b_idx, p_list] : buckets) {
-            std::shuffle(p_list.begin(), p_list.end(), rng);
-            size_t take = std::min(p_list.size(), queries_per_bucket);
-            queries.insert(queries.end(), p_list.begin(), p_list.begin() + take);
+    size_t computeLCP(std::string_view query, std::string_view candidate) const {
+        size_t n = std::min(query.size(), candidate.size());
+        size_t i = 0;
+        while (i < n && query[i] == candidate[i]) {
+            i++;
         }
+        return i;
     }
-    
-    // Fill remaining spots if bucket sampling didn't reach target
-    std::vector<std::vector<uint8_t>> all_valid_list(unique_prefixes.begin(), unique_prefixes.end());
-    std::uniform_int_distribution<size_t> dist_idx(0, all_valid_list.size() - 1);
-    while (queries.size() < n_queries_target) {
-        queries.push_back(all_valid_list[dist_idx(rng)]);
-    }
-
-    // --- Step 3: Shuffle ---
-    std::shuffle(queries.begin(), queries.end(), rng);
-
-    return queries;
-}
-
-/**
- * Prefix filtering using a linear scan over the dataset.
- * 
- * For each string in the dataset:
- * 1. Check if the string length is at least as long as the prefix.
- * 2. Perform a memcmp to compare the prefix with the start of the string.
- * 3. If it matches, record the string's index in the buffer.
- * 
- * Returns the number of matches found.
- */
-size_t linear_scan_prefix_filtering(
-    const std::vector<uint8_t>& data,
-    const std::vector<size_t>& end_positions,
-    const std::vector<uint8_t>& prefix,
-    size_t* buffer
-) {
-    size_t count = 0;
-    size_t n_strings = end_positions.size() - 1;
-    size_t p_len = prefix.size();
-    const uint8_t* p_data = prefix.data();
-
-    for (size_t i = 0; i < n_strings; ++i) {
-        size_t start = end_positions[i];
-        size_t len = end_positions[i + 1] - start;
-
-        // Length Filter
-        if (len < p_len) continue;
-
-        // Memcmp Comparison
-        bool match = std::memcmp(&data[start], p_data, p_len) == 0;
-        buffer[count] = i;
-        count += match;
-    }
-
-    return count;
-}
+};
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -155,8 +188,7 @@ int main(int argc, char* argv[]) {
     // Set CPU affinity if specified
     if (core_id.has_value()) {
         if (!try_set_affinity(core_id.value())) {
-            std::cerr << "Warning: Failed to set CPU affinity to core " << core_id.value() 
-                      << ". Continuing without core pinning.\n";
+            std::cerr << "Warning: Failed to set CPU affinity. Continuing anyway.\n";
         }
     }
 
@@ -183,7 +215,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Dataset: " << dataset_name << " | Queries: " << N_QUERIES << std::endl;
     std::cout << "================================================================================" << std::endl;
     std::cout << std::left 
-              << std::setw(10) << "Prefix" 
+              << std::setw(12) << "P_len" 
               << std::setw(18) << "Baseline (ms)" 
               << std::setw(18) << "OnPair (ms)" 
               << std::setw(10) << "Speedup" << std::endl;
@@ -202,13 +234,20 @@ int main(int argc, char* argv[]) {
     auto lpm = onpair.sort_dictionary();
     onpair.parse_data(data.data(), end_positions, lpm);
 
+    // Initialize Baseline Implementation (std::memcmp over uncompressed data)
+    RawCompressor baseline(data_size, n_elements);
+    baseline.compress(data.data(), end_positions);
+
+    // Initialize Query Generator
+    QueryGenerator query_gen(data, end_positions);
+
     // --- Warmup Phase ---
     {
         std::vector<size_t> warm_buf(n_elements);
-        auto warm_queries = generate_stratified_queries(data, end_positions, 4, 100);
+        auto warm_queries = query_gen.generate_queries(10, 100, 4);
         for(const auto& q : warm_queries) {
-            size_t count_base = linear_scan_prefix_filtering(data, end_positions, q, warm_buf.data());
-            size_t count_onpair = onpair.prefix_filtering(lpm, q, warm_buf.data());
+            size_t count_base = baseline.prefix_filtering(q.prefix, q.candidates, warm_buf.data());
+            size_t count_onpair = onpair.prefix_filtering(lpm, q.prefix, q.candidates, warm_buf.data());
             if (count_base != count_onpair) {
                 std::cerr << "\n[FATAL] Warmup Count mismatch! Base=" << count_base << " OnPair=" << count_onpair << std::endl;
                 exit(1);
@@ -220,9 +259,13 @@ int main(int argc, char* argv[]) {
     std::vector<size_t> buffer_base(n_elements);
     std::vector<size_t> buffer_onpair(n_elements);
 
-    for(size_t prefix_size : PREFIXES) {
+    for(size_t min_prefix_size = 4; min_prefix_size <= 64; min_prefix_size += 4) {
         // Generate queries
-        auto queries = generate_stratified_queries(data, end_positions, prefix_size, N_QUERIES);
+        auto queries = query_gen.generate_queries(N_QUERIES, N_CANDIDATES, min_prefix_size);
+
+        if(queries.size() < N_QUERIES) {
+            break; // Not enough queries could be generated
+        }
         
         size_t total_base_ns = 0;
         size_t total_onpair_ns = 0;
@@ -230,23 +273,23 @@ int main(int argc, char* argv[]) {
         for (const auto& q : queries) {
             // 1. Measure Baseline
             auto t0 = std::chrono::high_resolution_clock::now();
-            size_t count_base = linear_scan_prefix_filtering(data, end_positions, q, buffer_base.data());
+            size_t count_base = baseline.prefix_filtering(q.prefix, q.candidates, buffer_base.data());
             auto t1 = std::chrono::high_resolution_clock::now();
             total_base_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
 
             // 2. Measure OnPair
             auto t2 = std::chrono::high_resolution_clock::now();
-            size_t count_onpair = onpair.prefix_filtering(lpm, q, buffer_onpair.data());
+            size_t count_onpair = onpair.prefix_filtering(lpm, q.prefix, q.candidates, buffer_onpair.data());
             auto t3 = std::chrono::high_resolution_clock::now();
             total_onpair_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2).count();
 
             // 3. Verify correctness
             if(count_base != count_onpair) {
-                std::cerr << "\n[FATAL] Count mismatch! P=" << prefix_size << " Base=" << count_base << " OnPair=" << count_onpair << std::endl;
+                std::cerr << "\n[FATAL] Count mismatch!" << std::endl;
                 exit(1);
             }
             if(count_base > 0 && std::memcmp(buffer_base.data(), buffer_onpair.data(), count_base * sizeof(size_t)) != 0) {
-                 std::cerr << "\n[FATAL] Content mismatch! P=" << prefix_size << std::endl;
+                 std::cerr << "\n[FATAL] Content mismatch!" << std::endl;
                  exit(1);
             }
         }
@@ -258,7 +301,7 @@ int main(int argc, char* argv[]) {
 
         // Print Row
         std::cout << std::left 
-                  << std::setw(10) << prefix_size 
+                  << std::setw(12) << min_prefix_size 
                   << std::setw(18) << std::fixed << std::setprecision(2) << base_ms 
                   << std::setw(18) << std::fixed << std::setprecision(2) << onpair_ms 
                   << "\033[1;32m" << std::setw(9) << speedup << "x\033[0m" 

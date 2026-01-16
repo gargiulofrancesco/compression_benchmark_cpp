@@ -38,8 +38,8 @@ public:
     
     // Prefix filtering methods
     LongestPrefixMatcher<uint16_t> sort_dictionary();
-    uint32_t lower_bound(const std::vector<uint8_t>& target) const;
-    size_t prefix_filtering(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const;
+    inline uint32_t lower_bound(const uint8_t* target, size_t length) const;
+    size_t prefix_filtering(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const;
 
     // Analysis
     struct TokenStats {

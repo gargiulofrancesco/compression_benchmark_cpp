@@ -236,31 +236,36 @@ LongestPrefixMatcher<uint16_t> OnPairCompressor::sort_dictionary() {
     return std::move(lpm);
 }
 
-uint32_t OnPairCompressor::lower_bound(const std::vector<uint8_t>& target) const {
-    size_t left = 0;
-    size_t right = token_boundaries.size() - 1; // Number of tokens
-    
-    std::string_view target_sv(reinterpret_cast<const char*>(target.data()), target.size());
+uint32_t OnPairCompressor::lower_bound(const uint8_t* target, size_t target_length) const {
+    uint32_t left = 0;
+    uint32_t right = token_boundaries.size() - 1;
+
+    const uint8_t* dict_base = dictionary.data();
+    const uint32_t* boundaries = token_boundaries.data();
 
     while (left < right) {
-        size_t mid = left + (right - left) / 2;
-        
-        // Reconstruct token string_view
-        size_t start = token_boundaries[mid];
-        size_t len = token_boundaries[mid+1] - start;
-        std::string_view token_sv(reinterpret_cast<const char*>(dictionary.data() + start), len);
-        
-        if (token_sv < target_sv) {
+        uint32_t mid = left + ((right - left) >> 1);
+
+        // Compare token[mid] vs target
+        size_t token_start = boundaries[mid];
+        size_t token_len = boundaries[mid+1] - token_start;
+        const uint8_t* token_ptr = dict_base + token_start;
+
+        size_t min_len = (token_len < target_length) ? token_len : target_length;
+        int cmp = std::memcmp(token_ptr, target, min_len);
+
+        if (cmp < 0 || (cmp == 0 && token_len < target_length)) {
             left = mid + 1;
         } else {
             right = mid;
         }
     }
-    return static_cast<uint32_t>(left);
+
+    return left;
 }
 
 // Warning: Requires the underlying dictionary to be sorted lexicographically
-size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const {    
+size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const {    
     // 1. Parse prefix into tokens
     std::vector<uint16_t> query_tokens;
     size_t pos = 0;
@@ -284,7 +289,7 @@ size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& 
        temp_suffix.assign(prefix.begin() + current_pos, prefix.end());
         
         // Find Lower Bound (Start of range)
-        uint32_t start_idx = lower_bound(temp_suffix);
+        uint32_t start_idx = lower_bound(temp_suffix.data(), temp_suffix.size());
         
         // Find Upper Bound (Start of next lexical prefix)
         // Logic: Increment the last byte. If it overflows (255), pop and carry.
@@ -301,7 +306,7 @@ size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& 
         
         uint32_t end_idx;
         if (valid_next) {
-            end_idx = lower_bound(temp_suffix);
+            end_idx = lower_bound(temp_suffix.data(), temp_suffix.size());
         } else {
             end_idx = static_cast<uint32_t>(token_boundaries.size() - 1);
         }
@@ -319,21 +324,22 @@ size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& 
 
     // 3. Scan
     size_t match_count = 0;
-    size_t n_items = string_boundaries.size() - 1;
     const uint16_t* compressed_base = compressed_data.data();
     const size_t* boundaries_ptr = string_boundaries.data();
     const uint16_t* query_begin = query_tokens.data();
 
-    for (size_t i = 0; i < n_items; ++i) {
-        size_t start = boundaries_ptr[i];
-        size_t end = boundaries_ptr[i + 1];
+    for (auto idx : candidates) {
+        size_t start = boundaries_ptr[idx];
+        size_t end = boundaries_ptr[idx + 1];
         size_t doc_len = end - start;
         size_t min_len = doc_len < q_len ? doc_len : q_len;
         const uint16_t* doc_begin = compressed_base + start;
 
         // Find mismatch index
-        auto [doc_iter, query_iter] = std::mismatch(doc_begin, doc_begin + min_len, query_begin);
-        size_t diff_idx = query_iter - query_begin; 
+        size_t diff_idx = 0;
+        while (diff_idx < min_len && doc_begin[diff_idx] == query_begin[diff_idx]) {
+            diff_idx++;
+        }
 
         const uint16_t token = doc_begin[diff_idx];
         const auto& interval = intervals[diff_idx];
@@ -348,7 +354,7 @@ size_t OnPairCompressor::prefix_filtering(const LongestPrefixMatcher<uint16_t>& 
         bool is_match = exact_match | (interval_match & not_at_end);
 
         // Update matches
-        buffer[match_count] = i;
+        buffer[match_count] = idx;
         match_count += is_match;
     }
     

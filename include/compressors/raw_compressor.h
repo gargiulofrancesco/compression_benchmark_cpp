@@ -5,7 +5,7 @@
 
 class RawCompressor : public Compressor<RawCompressor> {
 private:
-    std::vector<uint8_t> compressed_data;
+    std::vector<uint8_t> uncompressed_data;
     std::vector<size_t> offsets;
 
 public:
@@ -17,6 +17,9 @@ public:
     size_t get_item_at(size_t index, uint8_t* buffer) const;
     size_t space_used_bytes() const;
     const char* name() const;
+
+    // Prefix filtering using std::memcmp
+    size_t prefix_filtering(const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const;
 };
 
 #endif // RAW_COMPRESSOR_H

@@ -197,8 +197,7 @@ int main(int argc, char* argv[]) {
     // Set CPU affinity if specified
     if (core_id.has_value()) {
         if (!try_set_affinity(core_id.value())) {
-            std::cerr << "Warning: Failed to set CPU affinity to core " << core_id.value() 
-                      << ". Continuing without core pinning.\n";
+            std::cerr << "Warning: Failed to set CPU affinity. Continuing anyway.\n";
         }
     }
 
