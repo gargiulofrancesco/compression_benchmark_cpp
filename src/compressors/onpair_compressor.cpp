@@ -292,7 +292,7 @@ std::pair<uint32_t, uint32_t> OnPairCompressor::valid_divergence(const uint8_t* 
     return {lb, ub};
 }
 
-// Warning: Requires the underlying dictionary to be sorted lexicographically
+// PRE-CONDITION: Dictionary must be sorted lexicographically
 size_t OnPairCompressor::prefix_filtering(
     const LongestPrefixMatcher<uint16_t>& lpm, 
     const std::vector<uint8_t>& prefix, 
@@ -356,8 +356,6 @@ size_t OnPairCompressor::prefix_filtering(
             diff_idx++;
         }
 
-        const uint16_t token = doc_begin[diff_idx];
-
         // Condition A: Exact Prefix Match (We processed the whole query length)
         if (diff_idx == q_len) {
             buffer[match_count++] = idx;
@@ -368,7 +366,7 @@ size_t OnPairCompressor::prefix_filtering(
         // We only check intervals if we are not at the end of the document
         // (If diff_idx == doc_len, the document ended before the query => mismatch)
         if (diff_idx < doc_len) {
-            uint16_t token = doc_begin[diff_idx];
+            const uint16_t token = doc_begin[diff_idx];
             const auto& [lb, ub] = intervals[diff_idx];
             
             if (static_cast<uint16_t>(token - lb) < static_cast<uint16_t>(ub - lb)) {
@@ -380,9 +378,81 @@ size_t OnPairCompressor::prefix_filtering(
     return match_count;
 }
 
-// Warning: Requires the underlying dictionary to be sorted lexicographically
-size_t OnPairCompressor::prefix_filtering_lazy(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const { 
-    return 0;
+// PRE-CONDITION: Dictionary must be sorted lexicographically
+size_t OnPairCompressor::prefix_filtering_lazy(
+    const LongestPrefixMatcher<uint16_t>& lpm, 
+    const std::vector<uint8_t>& prefix, 
+    const std::vector<size_t>& candidates, 
+    size_t* buffer) 
+const { 
+    // 1. Parse prefix into tokens
+    std::vector<uint16_t> query_tokens;
+    std::vector<size_t> query_offsets;
+    query_tokens.reserve(prefix.size()); 
+    query_offsets.reserve(prefix.size());
+
+    size_t pos = 0;
+    while (pos < prefix.size()) {
+        auto match = lpm.find_longest_match(prefix.data() + pos, prefix.size() - pos);
+        query_tokens.push_back(match->first);
+        query_offsets.push_back(pos);
+        pos += match->second;
+    }
+
+    size_t q_len = query_tokens.size();
+
+    // 2. Scan (lazy interval computation)
+    size_t match_count = 0;
+    const uint16_t* compressed_base = compressed_data.data();
+    const size_t* boundaries_ptr = string_boundaries.data();
+    const uint16_t* query_begin = query_tokens.data();
+
+    std::vector<std::pair<uint32_t, uint32_t>> intervals(query_tokens.size());
+    std::vector<uint8_t> is_computed(query_tokens.size(), 0);   
+    std::vector<uint8_t> suffix_buf;
+    suffix_buf.resize(prefix.size());
+
+    for (auto idx : candidates) {
+        size_t start = boundaries_ptr[idx];
+        size_t end = boundaries_ptr[idx + 1];
+        size_t doc_len = end - start;
+        size_t min_len = doc_len < q_len ? doc_len : q_len;
+        const uint16_t* doc_begin = compressed_base + start;
+
+        // Find mismatch index
+        size_t diff_idx = 0;
+        while (diff_idx < min_len && doc_begin[diff_idx] == query_begin[diff_idx]) {
+            diff_idx++;
+        }
+
+        // Condition A: Exact Prefix Match (We processed the whole query length)
+        if (diff_idx == q_len) {
+            buffer[match_count++] = idx;
+            continue;
+        }
+
+        // Condition B: Valid Divergence
+        // We only check intervals if we are not at the end of the document
+        // (If diff_idx == doc_len, the document ended before the query => mismatch)
+        if (diff_idx < doc_len) {
+            if(is_computed[diff_idx] == 0) {
+                const uint8_t* suffix_ptr = prefix.data() + query_offsets[diff_idx];
+                size_t suffix_len = prefix.size() - query_offsets[diff_idx];
+                auto [lb, ub] = valid_divergence(suffix_ptr, suffix_len, suffix_buf.data());
+                intervals[diff_idx] = {lb, ub};
+                is_computed[diff_idx] = 1;
+            }
+
+            uint16_t token = doc_begin[diff_idx];
+            const auto& [lb, ub] = intervals[diff_idx];
+            
+            if (static_cast<uint16_t>(token - lb) < static_cast<uint16_t>(ub - lb)) {
+                buffer[match_count++] = idx;
+            }
+        }
+    }
+    
+    return match_count;
 }
 
 std::vector<OnPairCompressor::TokenStats> OnPairCompressor::get_token_statistics() const {
