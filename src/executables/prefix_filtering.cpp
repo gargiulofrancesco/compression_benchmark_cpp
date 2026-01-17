@@ -38,6 +38,7 @@ const size_t SAMPLING_SEED = 42;
 const float TARGET_SAMPLE_FRACTION = 0.1f;
 
 struct BenchmarkBatch {
+    double lcp_avg;
     std::vector<uint8_t> prefix;
     std::vector<size_t> candidates;
 };
@@ -66,85 +67,93 @@ public:
             });
     }
 
-    /*
-     * Generate a set of benchmark queries.
-     *
-     * Each query consists of:
-     * - A prefix extracted from a randomly selected string in the dataset.
-     * - A set of candidate string indices that share a common prefix with the query.
-     * 
-     * The generation process ensures that each candidate shares at least
-     * `min_prefix_len - 1` bytes with the query prefix. Since we want to include both matches
-     * and mismatches, candidates may differ on the next byte.
-    */
+    /**
+     * Strategy:
+     * 1. Pick a pivot and define a query prefix of length `max_prefix_size`.
+     * 2. Scan the dataset to classify strings into buckets based on their LCP with the query (0 to max).
+     * 3. Sample candidates greedily from the highest LCP buckets to ensure hard negatives.
+     */
     std::vector<BenchmarkBatch> generate_queries(
         size_t n_queries,
         size_t n_candidates,
-        size_t min_prefix_len
+        size_t max_prefix_size
     ) {
         std::vector<BenchmarkBatch> result;
-
-        size_t match_threshold = (min_prefix_len > 0) ? min_prefix_len - 1 : 0;
-        
         size_t n_strings = sorted_indices.size();
-        std::uniform_int_distribution<size_t> dist_idx(0, n_strings - 1);
 
-        // Create a list of all possible ranks to try as pivots
-        std::vector<size_t> pivot_ranks(n_strings);
-        std::iota(pivot_ranks.begin(), pivot_ranks.end(), 0);
-        std::shuffle(pivot_ranks.begin(), pivot_ranks.end(), rng);
+        // Use a randomized permutation for scanning to avoid locality bias
+        std::vector<size_t> random_indices(n_strings);
+        std::iota(random_indices.begin(), random_indices.end(), 0);
+        std::shuffle(random_indices.begin(), random_indices.end(), rng);
 
-        for(auto pivot_rank : pivot_ranks) {
+        for(auto idx : random_indices) {
             if(result.size() >= n_queries) break;
 
-            BenchmarkBatch batch;
-            size_t pivot_idx = sorted_indices[pivot_rank];
-            std::string_view pivot_str = getString(pivot_idx);
-
-            // Check if the Pivot can produce the desired prefix length
-            if (pivot_str.size() < min_prefix_len) {
+            std::string_view query_sv = getString(idx);
+            
+            if (query_sv.size() < max_prefix_size) {
                 continue;
             }
 
-            std::string_view pivot_prefix = std::string_view(pivot_str.data(), min_prefix_len);
-            batch.prefix.assign(pivot_prefix.begin(), pivot_prefix.end());
+            BenchmarkBatch batch;
+            std::string_view prefix_sv = std::string_view(query_sv.data(), max_prefix_size);
+            batch.prefix.assign(prefix_sv.begin(), prefix_sv.end());
 
-            // Explore candidates upwards
-            for(size_t cand_rank = pivot_rank + 1; cand_rank < n_strings; ++cand_rank) {
-                size_t cand_idx = sorted_indices[cand_rank];
-                std::string_view cand_str = getString(cand_idx);
-                size_t common_prefix = computeLCP(pivot_prefix, cand_str);
-                if (common_prefix >= match_threshold && cand_str.size() >= min_prefix_len) {
-                    batch.candidates.push_back(cand_idx);
-                } else {
-                    break; // No longer matching
+            // Buckets[k] stores candidates that share exactly k bytes with prefix.
+            std::vector<std::vector<size_t>> buckets(max_prefix_size + 1);
+
+            // Optimization: Cap bucket size to save memory. 
+            // Since we scan in random order, filling the first items is a valid random sample
+            size_t bucket_cap = n_candidates;
+            size_t buckets_filled = 0;
+
+            // Sample candidates
+            std::vector<size_t> candidate_indices(n_strings);
+            std::iota(candidate_indices.begin(), candidate_indices.end(), 0);
+            std::shuffle(candidate_indices.begin(), candidate_indices.end(), rng);
+
+            // Populate buckets
+            for(auto cand_idx : candidate_indices) {
+                if (cand_idx == idx) continue; // Skip the query itself
+
+                std::string_view cand_sv = getString(cand_idx);
+                size_t lcp = computeLCP(prefix_sv, cand_sv);
+
+                if (buckets[lcp].size() < bucket_cap) {
+                    buckets[lcp].push_back(cand_idx);
+                    if (buckets[lcp].size() == bucket_cap) {
+                        buckets_filled++;
+                    }
+                }
+
+                if (buckets_filled == buckets.size()) {
+                    break; // All buckets are full
                 }
             }
 
-            // Explore candidates downwards
-            for(int cand_rank = static_cast<int>(pivot_rank) - 1; cand_rank >= 0; --cand_rank) {
-                size_t cand_idx = sorted_indices[cand_rank];
-                std::string_view cand_str = getString(cand_idx);
-                size_t common_prefix = computeLCP(pivot_prefix, cand_str);
-                if (common_prefix >= match_threshold && cand_str.size() >= min_prefix_len) {
-                    batch.candidates.push_back(cand_idx);
-                } else {
-                    break; // No longer matching
+            // Strategy: Prioritize Hard Negatives (Greedy Descending LCP).
+            // Motivation: We construct a worst-case workload by filling the candidate set 
+            // with strings sharing the longest possible prefix with the query.
+            size_t total_lcp = 0;
+            for(size_t lcp = max_prefix_size; lcp >= 0; --lcp) {
+                while(!buckets[lcp].empty() && batch.candidates.size() < n_candidates) {
+                    total_lcp += lcp;
+                    batch.candidates.push_back(buckets[lcp].back());
+                    buckets[lcp].pop_back();
                 }
+                if (batch.candidates.size() >= n_candidates) break;
             }
 
-            // Only keep batches with enough candidates
-            if (batch.candidates.size() >= n_candidates) {
-                // Ensure unique candidates if overlaps occurred
-                std::sort(batch.candidates.begin(), batch.candidates.end());
-                batch.candidates.erase(std::unique(batch.candidates.begin(), batch.candidates.end()), batch.candidates.end());
+            double lcp_avg = static_cast<double>(total_lcp) / batch.candidates.size();
+            double lcp_difference = static_cast<double>(max_prefix_size) - lcp_avg;
+            double lcp_error = lcp_difference / static_cast<double>(max_prefix_size);
 
-                if (batch.candidates.size() >= n_candidates) {
-                    // Shuffle and trim candidates
-                    std::shuffle(batch.candidates.begin(), batch.candidates.end(), rng);
-                    batch.candidates.resize(n_candidates);
-                    result.push_back(std::move(batch));
-                }
+            // Accept only batches with sufficient candidates and low LCP error
+            if(batch.candidates.size() == n_candidates && lcp_error <= 0.1) {
+                // Shuffle final candidates to mix LCPs
+                batch.lcp_avg = lcp_avg;
+                std::shuffle(batch.candidates.begin(), batch.candidates.end(), rng);
+                result.push_back(std::move(batch));
             }
         }
 
@@ -215,7 +224,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Dataset: " << dataset_name << " | Queries: " << N_QUERIES << std::endl;
     std::cout << "================================================================================" << std::endl;
     std::cout << std::left 
-              << std::setw(12) << "P_len" 
+              << std::setw(18) << "LCP_avg" 
               << std::setw(18) << "Baseline (ms)" 
               << std::setw(18) << "OnPair (ms)" 
               << std::setw(10) << "Speedup" << std::endl;
@@ -298,10 +307,12 @@ int main(int argc, char* argv[]) {
         double base_ms = total_base_ns / 1e6;
         double onpair_ms = total_onpair_ns / 1e6;
         double speedup = base_ms / onpair_ms;
+        double lcp_avg = std::accumulate(queries.begin(), queries.end(), 0.0,
+            [](double sum, const auto& batch) { return sum + batch.lcp_avg; }) / queries.size();
 
         // Print Row
         std::cout << std::left 
-                  << std::setw(12) << min_prefix_size 
+                  << std::setw(18) << std::fixed << std::setprecision(2) << lcp_avg
                   << std::setw(18) << std::fixed << std::setprecision(2) << base_ms 
                   << std::setw(18) << std::fixed << std::setprecision(2) << onpair_ms 
                   << "\033[1;32m" << std::setw(9) << speedup << "x\033[0m" 
