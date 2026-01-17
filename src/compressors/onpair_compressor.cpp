@@ -455,6 +455,145 @@ const {
     return match_count;
 }
 
+// This variant parses the prefix query but doesn't precompute intervals, 
+// it explicitly check the mismatching token in the dictionary each time.
+size_t OnPairCompressor::prefix_filtering_unsorted(
+    const LongestPrefixMatcher<uint16_t>& lpm, 
+    const std::vector<uint8_t>& prefix, 
+    const std::vector<size_t>& candidates, 
+    size_t* buffer
+) const {  
+    // 1. Parse prefix into tokens
+    std::vector<uint16_t> query_tokens;
+    std::vector<size_t> query_offsets;
+    query_tokens.reserve(prefix.size()); 
+    query_offsets.reserve(prefix.size());
+
+    size_t pos = 0;
+    while (pos < prefix.size()) {
+        auto match = lpm.find_longest_match(prefix.data() + pos, prefix.size() - pos);
+        query_tokens.push_back(match->first);
+        query_offsets.push_back(pos);
+        pos += match->second;
+    }
+
+    size_t q_len = query_tokens.size();
+
+    // 2. Scan
+    size_t match_count = 0;
+    const uint16_t* compressed_base = compressed_data.data();
+    const uint8_t* dict_base = dictionary.data();
+    const uint32_t* token_offsets_ptr = token_boundaries.data();
+    const size_t* boundaries_ptr = string_boundaries.data();
+    const uint16_t* query_begin = query_tokens.data();
+
+    for (auto idx : candidates) {
+        size_t start = boundaries_ptr[idx];
+        size_t end = boundaries_ptr[idx + 1];
+        size_t doc_len = end - start;
+        size_t min_len = doc_len < q_len ? doc_len : q_len;
+        const uint16_t* doc_begin = compressed_base + start;
+
+        // Find mismatch index
+        size_t diff_idx = 0;
+        while (diff_idx < min_len && doc_begin[diff_idx] == query_begin[diff_idx]) {
+            diff_idx++;
+        }
+
+        // Condition A: Exact Prefix Match (We processed the whole query length)
+        if (diff_idx == q_len) {
+            buffer[match_count++] = idx;
+            continue;
+        }
+
+        // Condition B: Valid Divergence
+        // Explicitly access the dictionary to check the token
+        if (diff_idx < doc_len) {
+            const uint16_t token = doc_begin[diff_idx];
+
+            // Get dictionary string for the mismatching token
+            size_t t_start = token_offsets_ptr[token];
+            size_t t_len = token_offsets_ptr[token + 1] - t_start;
+            const uint8_t* token_ptr = dict_base + t_start;
+
+            // 2. Get the remaining suffix of the query
+            size_t q_offset = query_offsets[diff_idx];
+            size_t q_suffix_len = prefix.size() - q_offset;
+            const uint8_t* query_suffix_ptr = prefix.data() + q_offset;
+            
+            // 3. Comparison Logic
+            // The mismatching token must start with the query suffix bytes.
+            if (t_len >= q_suffix_len) {
+                if (std::memcmp(token_ptr, query_suffix_ptr, q_suffix_len) == 0) {
+                    buffer[match_count++] = idx;
+                }
+            }
+        }
+    }
+    
+    return match_count;
+}
+
+// Baseline: OnPair without Token Parsing / Interval Precomputation.
+// Decompresses candidates on-the-fly to compare against the raw prefix.
+size_t OnPairCompressor::prefix_filtering_decompress(
+    const std::vector<uint8_t>& prefix, 
+    const std::vector<size_t>& candidates, 
+    size_t* buffer
+) const{
+    const uint16_t* compressed_base = compressed_data.data();
+    const size_t* boundaries_ptr = string_boundaries.data();
+    const uint8_t* dict_base = dictionary.data();
+    const uint32_t* token_offsets_ptr = token_boundaries.data();
+    
+    const uint8_t* prefix_base = prefix.data();
+    size_t prefix_len = prefix.size();
+
+    size_t match_count = 0;
+    for (auto idx : candidates) {
+        size_t start = boundaries_ptr[idx];
+        size_t end = boundaries_ptr[idx + 1];
+        const uint16_t* doc_tokens = compressed_base + start;
+        size_t n_tokens = end - start;
+        
+        size_t current_prefix_pos = 0;
+        bool mismatach = false;
+
+        for (size_t i = 0; i < n_tokens; ++i) {
+            uint16_t token = doc_tokens[i];
+            
+            // Get token content
+            size_t t_start = token_offsets_ptr[token];
+            size_t t_len = token_offsets_ptr[token + 1] - t_start;
+            const uint8_t* token_ptr = dict_base + t_start;
+
+            // Determine how much to compare
+            // Optimistically assume full token matches remaining prefix part
+            size_t remaining_prefix = prefix_len - current_prefix_pos;
+            size_t cmp_len = (t_len < remaining_prefix) ? t_len : remaining_prefix;
+
+            // Fast memcmp for this segment
+            if (std::memcmp(token_ptr, prefix_base + current_prefix_pos, cmp_len) != 0) {
+                mismatach = true;
+                break;
+            }
+
+            current_prefix_pos += cmp_len;
+            
+            // If we have matched the entire prefix, we are done
+            if (current_prefix_pos == prefix_len) {
+                break;
+            }
+        }
+
+        if (!mismatach && current_prefix_pos == prefix_len) {
+            buffer[match_count++] = idx;
+        }
+    }
+
+    return match_count;
+}
+
 std::vector<OnPairCompressor::TokenStats> OnPairCompressor::get_token_statistics() const {
     size_t num_tokens = token_boundaries.size() - 1;
     std::vector<size_t> frequencies(num_tokens, 0);
