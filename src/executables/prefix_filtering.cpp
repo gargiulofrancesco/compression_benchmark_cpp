@@ -232,7 +232,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Dataset: " << dataset_name << " | #Candidates: " << n_candidates << " | Queries: " << N_QUERIES << std::endl;
         std::cout << "================================================================================" << std::endl;
         std::cout << std::left 
-                << std::setw(18) << "Prefix (B)" 
+                << std::setw(18) << "Prefix Size (B)" 
                 << std::setw(18) << "Baseline (ms)" 
                 << std::setw(18) << "OnPair (ms)" 
                 << std::setw(10) << "Speedup" 

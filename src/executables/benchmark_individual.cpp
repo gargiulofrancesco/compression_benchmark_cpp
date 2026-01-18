@@ -30,6 +30,7 @@
 #include "deflate_individual_compressor.h"
 #include "bpe_compressor.h"
 #include "sampled_bpe_compressor.h"
+#include "front_coding_compressor.h"
 #include "benchmark_utils.h"
 
 // Number of random access queries for latency measurement
@@ -281,6 +282,11 @@ int main(int argc, char* argv[]) {
             SampledBPECompressor compressor = SampledBPECompressor::create(data.size(), end_positions.size()-1);
             compressor.set_seed(SAMPLING_SEED);
             compressor.set_sample_size(sample_size);
+            result = benchmark(compressor, dataset_name, data, end_positions, queries);
+        }
+        else if (compressor_name == "front_coding") {
+            warmup<FrontCodingCompressor>(dataset_name, data, end_positions, queries);
+            FrontCodingCompressor compressor = FrontCodingCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {
