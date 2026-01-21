@@ -19,7 +19,7 @@ public:
     const char* name() const;
 
     // Prefix filtering using std::memcmp
-    size_t prefix_filtering(const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const;
+    size_t prefix_filtering(const std::vector<uint8_t>& prefix, size_t* buffer) const;
 };
 
 #endif // RAW_COMPRESSOR_H

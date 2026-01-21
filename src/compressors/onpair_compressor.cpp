@@ -296,7 +296,6 @@ std::pair<uint32_t, uint32_t> OnPairCompressor::valid_divergence(const uint8_t* 
 size_t OnPairCompressor::prefix_filtering_sorted(
     const LongestPrefixMatcher<uint16_t>& lpm, 
     const std::vector<uint8_t>& prefix, 
-    const std::vector<size_t>& candidates, 
     size_t* buffer
 ) const {    
     // 1. Parse prefix into tokens
@@ -343,7 +342,7 @@ size_t OnPairCompressor::prefix_filtering_sorted(
     const size_t* boundaries_ptr = string_boundaries.data();
     const uint16_t* query_begin = query_tokens.data();
 
-    for (auto idx : candidates) {
+    for (size_t idx = 0; idx < string_boundaries.size() - 1; ++idx) {
         size_t start = boundaries_ptr[idx];
         size_t end = boundaries_ptr[idx + 1];
         size_t doc_len = end - start;
@@ -383,7 +382,6 @@ size_t OnPairCompressor::prefix_filtering_sorted(
 size_t OnPairCompressor::prefix_filtering_unsorted(
     const LongestPrefixMatcher<uint16_t>& lpm, 
     const std::vector<uint8_t>& prefix, 
-    const std::vector<size_t>& candidates, 
     size_t* buffer
 ) const { 
     // 1. Parse prefix into tokens
@@ -410,7 +408,7 @@ size_t OnPairCompressor::prefix_filtering_unsorted(
     const uint8_t* dict_base = dictionary.data();
     const uint32_t* token_offsets_ptr = token_boundaries.data();
 
-    for (auto idx : candidates) {
+    for (size_t idx = 0; idx < string_boundaries.size() - 1; ++idx) {
         size_t start = boundaries_ptr[idx];
         size_t end = boundaries_ptr[idx + 1];
         size_t doc_len = end - start;

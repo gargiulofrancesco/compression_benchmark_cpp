@@ -33,7 +33,7 @@ size_t RawCompressor::get_item_at(size_t index, uint8_t* buffer) const {
     return size;
 }
 
-size_t RawCompressor::prefix_filtering(const std::vector<uint8_t>& prefix, const std::vector<size_t>& candidates, size_t* buffer) const {    
+size_t RawCompressor::prefix_filtering(const std::vector<uint8_t>& prefix, size_t* buffer) const {    
     size_t count = 0;
     size_t p_len = prefix.size();
     const uint8_t* p_data = prefix.data();
@@ -41,7 +41,7 @@ size_t RawCompressor::prefix_filtering(const std::vector<uint8_t>& prefix, const
     const size_t* offsets_ptr = offsets.data();
     const uint8_t* data_base = uncompressed_data.data();
 
-    for (auto idx : candidates) {
+    for (size_t idx = 0; idx < offsets.size() - 1; ++idx) {
         size_t start = offsets_ptr[idx];
         size_t len = offsets_ptr[idx + 1] - start;
 

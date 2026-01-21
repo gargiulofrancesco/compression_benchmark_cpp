@@ -27,6 +27,9 @@
 #include "onpair_compressor.h"
 #include "raw_compressor.h"
 
+// Number of runs for statistical significance
+const size_t N_RUNS = 15;
+
 // Queries configuration
 const int N_QUERIES = 100;
 const int QUERIES_SEED = 123;
@@ -35,48 +38,19 @@ const int QUERIES_SEED = 123;
 const size_t SAMPLING_SEED = 42;
 const float TARGET_SAMPLE_FRACTION = 0.1f;
 
-struct BenchmarkBatch {
-    std::vector<uint8_t> prefix;
-    std::vector<size_t> candidates;
-};
-
 class QueryGenerator {
     const std::vector<uint8_t>& data;
     const std::vector<size_t>& end_positions;
-    std::vector<size_t> sorted_indices; // Permutation of string IDs
     std::mt19937 rng{QUERIES_SEED};
 
 public:
     QueryGenerator(const std::vector<uint8_t>& data, 
                    const std::vector<size_t>& end_positions)
-        : data(data), end_positions(end_positions) {
-        
-        // Preprocessing: Sort string indices lexicographically
+        : data(data), end_positions(end_positions) {}
+
+    std::vector<std::vector<uint8_t>> generate_queries (size_t n_queries) {
+        std::vector<std::vector<uint8_t>> result;
         size_t n_strings = end_positions.size() - 1;
-        sorted_indices.resize(n_strings);
-        std::iota(sorted_indices.begin(), sorted_indices.end(), 0);
-
-        std::sort(sorted_indices.begin(), sorted_indices.end(), 
-            [&](size_t a, size_t b) {
-                std::string_view sa = getString(a);
-                std::string_view sb = getString(b);
-                return sa < sb;
-            });
-    }
-
-    /**
-     * Strategy:
-     * 1. Pick a pivot and define a query prefix of length `prefix_size`.
-     * 2. Scan the dataset to classify strings into buckets based on their LCP with the query (0 to prefix_size).
-     * 3. Randomly sample candidates from buckets.
-     */
-    std::vector<BenchmarkBatch> generate_queries_random_access(
-        size_t n_queries,
-        size_t n_candidates,
-        size_t prefix_size
-    ) {
-        std::vector<BenchmarkBatch> result;
-        size_t n_strings = sorted_indices.size();
 
         // Randomize string order for selecting prefixes
         std::vector<size_t> prefix_sampling(n_strings);
@@ -86,95 +60,18 @@ public:
         for(auto prefix_idx : prefix_sampling) {
             if(result.size() >= n_queries) break;
 
-            std::string_view query_sv = getString(prefix_idx);
-            
-            if (query_sv.size() < prefix_size) {
-                continue;
-            }
+            size_t string_start = end_positions[prefix_idx];
+            size_t string_end = end_positions[prefix_idx + 1];
+            size_t string_length = string_end - string_start;
 
-            BenchmarkBatch batch;
-            std::string_view prefix_sv = std::string_view(query_sv.data(), prefix_size);
-            batch.prefix.assign(prefix_sv.begin(), prefix_sv.end());
+            if (string_length == 0) continue;
 
-            // Buckets[k] stores candidates that share exactly k bytes with prefix.
-            std::vector<std::vector<size_t>> buckets(prefix_size + 1);
-            for(size_t cand_idx = 0; cand_idx < n_strings; ++cand_idx) {
-                if (cand_idx == prefix_idx) continue; // Skip the query itself
-                std::string_view cand_sv = getString(cand_idx);
-                size_t lcp = computeLCP(prefix_sv, cand_sv);
-                buckets[lcp].push_back(cand_idx);
-            }
-
-            // Shuffle buckets to ensure randomness within same LCP
-            for(auto& bucket : buckets) {
-                std::shuffle(bucket.begin(), bucket.end(), rng);
-            }
-
-            // Strategy: Randomly sample candidates from buckets
-            std::uniform_int_distribution <size_t> dist(0, prefix_size);
-            while(batch.candidates.size() < n_candidates){
-                size_t lcp_rnd = dist(rng);
-                if(!buckets[lcp_rnd].empty()) {
-                    batch.candidates.push_back(buckets[lcp_rnd].back());
-                    buckets[lcp_rnd].pop_back();
-                }
-            }
-            
-            result.push_back(std::move(batch));
+            std::uniform_int_distribution<size_t> dist(1, string_length);
+            size_t prefix_len = dist(rng);
+            result.emplace_back(data.begin() + string_start, data.begin() + string_start + prefix_len);
         }
 
         return result;
-    }
-
-    std::vector<BenchmarkBatch> generate_queries_scan(
-    size_t n_queries,
-    size_t prefix_size
-    ) {
-        std::vector<BenchmarkBatch> result;
-        size_t n_strings = sorted_indices.size();
-
-        // Randomize string order for selecting prefixes
-        std::vector<size_t> prefix_sampling(n_strings);
-        std::iota(prefix_sampling.begin(), prefix_sampling.end(), 0);
-        std::shuffle(prefix_sampling.begin(), prefix_sampling.end(), rng);
-
-        for(auto prefix_idx : prefix_sampling) {
-            if(result.size() >= n_queries) break;
-
-            std::string_view query_sv = getString(prefix_idx);
-            
-            if (query_sv.size() < prefix_size) {
-                continue;
-            }
-
-            BenchmarkBatch batch;
-            std::string_view prefix_sv = std::string_view(query_sv.data(), prefix_size);
-            batch.prefix.assign(prefix_sv.begin(), prefix_sv.end());
-
-            // Return the indices to evaluate the entire dataset sequentially
-            std::vector<size_t> all_indices(n_strings);
-            std::iota(all_indices.begin(), all_indices.end(), 0);
-            batch.candidates = std::move(all_indices);
-            result.push_back(std::move(batch));
-        }
-
-        return result;
-    }
-
-private:
-    std::string_view getString(size_t index) const {
-        size_t start = end_positions[index];
-        size_t len = end_positions[index+1] - start;
-        return {reinterpret_cast<const char*>(data.data() + start), len};
-    }
-
-    size_t computeLCP(std::string_view query, std::string_view candidate) const {
-        size_t n = std::min(query.size(), candidate.size());
-        size_t i = 0;
-        while (i < n && query[i] == candidate[i]) {
-            i++;
-        }
-        return i;
     }
 };
 
@@ -215,131 +112,130 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error loading dataset: " << e.what() << std::endl;
         return 1;
     }
-    
+
+    // Dataset parameters
     size_t n_elements = end_positions.size() - 1;
     size_t data_size = data.size();
 
-    // Initialize Baseline Implementation (std::memcmp over uncompressed data)
-    RawCompressor baseline(data_size, n_elements);
-    baseline.compress(data.data(), end_positions);
+    // Latency measurements
+    std::vector<size_t> baseline_latencies;
+    std::vector<size_t> onpair_sorted_latencies;
+    std::vector<size_t> onpair_unsorted_latencies;
+    
+    // Preallocate output buffers
+    std::vector<size_t> buffer_base(n_elements);
+    std::vector<size_t> buffer_onpair_sorted(n_elements);
+    std::vector<size_t> buffer_onpair_unsorted(n_elements);
 
-    // Prepare OnPair Sorted compressor for prefix filtering
-    OnPairCompressor onpair_sorted(data_size, n_elements);
+    // Run multiple times for statistical significance
+    for(size_t run = 0; run < N_RUNS; ++run) {
+        // Initialize Baseline Implementation (std::memcmp over uncompressed data)
+        RawCompressor baseline(data_size, n_elements);
+        baseline.compress(data.data(), end_positions);
 
-    size_t target_sample_size = static_cast<size_t>(data.size() * TARGET_SAMPLE_FRACTION);
-    auto [threshold, _] = find_onpair_params(data, end_positions, target_sample_size, SAMPLING_SEED);
-    onpair_sorted.set_seed(SAMPLING_SEED);
-    onpair_sorted.set_threshold(threshold);
-    auto permutation = onpair_sorted.generate_random_permutation(n_elements);
+        // Prepare OnPair Sorted compressor for prefix filtering
+        OnPairCompressor onpair_sorted(data_size, n_elements);
 
-    onpair_sorted.train_dictionary(data.data(), end_positions, permutation);
-    auto lpm_sorted = onpair_sorted.sort_dictionary();
-    onpair_sorted.parse_data(data.data(), end_positions, lpm_sorted);
+        size_t target_sample_size = static_cast<size_t>(data.size() * TARGET_SAMPLE_FRACTION);
+        auto [threshold, _] = find_onpair_params(data, end_positions, target_sample_size, SAMPLING_SEED);
+        onpair_sorted.set_seed(SAMPLING_SEED);
+        onpair_sorted.set_threshold(threshold);
+        auto permutation = onpair_sorted.generate_random_permutation(n_elements);
 
-    // Prepare OnPair Unsorted (control variable to evaluate speedup of sorted dictionary)
-    OnPairCompressor onpair_unsorted(data_size, n_elements);
-    onpair_unsorted.set_seed(SAMPLING_SEED);
-    onpair_unsorted.set_threshold(threshold);
-    auto lpm_unsorted = onpair_unsorted.train_dictionary(data.data(), end_positions, permutation).first;
-    onpair_unsorted.parse_data(data.data(), end_positions, lpm_unsorted);
+        onpair_sorted.train_dictionary(data.data(), end_positions, permutation);
+        auto lpm_sorted = onpair_sorted.sort_dictionary();
+        onpair_sorted.parse_data(data.data(), end_positions, lpm_sorted);
 
-    // Initialize Query Generator
-    QueryGenerator query_gen(data, end_positions);
+        // Prepare OnPair Unsorted (control variable to evaluate speedup of sorted dictionary)
+        OnPairCompressor onpair_unsorted(data_size, n_elements);
+        onpair_unsorted.set_seed(SAMPLING_SEED);
+        onpair_unsorted.set_threshold(threshold);
+        auto lpm_unsorted = onpair_unsorted.train_dictionary(data.data(), end_positions, permutation).first;
+        onpair_unsorted.parse_data(data.data(), end_positions, lpm_unsorted);
 
-    // --- Warmup Phase ---
-    {
-        std::vector<size_t> warm_buf(n_elements);
-        auto warm_queries = query_gen.generate_queries_random_access(10, 100, 4);
-        for(const auto& q : warm_queries) {
-            size_t count_base = baseline.prefix_filtering(q.prefix, q.candidates, warm_buf.data());
-            size_t count_onpair_sorted = onpair_sorted.prefix_filtering_sorted(lpm_sorted, q.prefix, q.candidates, warm_buf.data());
-            size_t count_onpair_unsorted = onpair_unsorted.prefix_filtering_unsorted(lpm_unsorted, q.prefix, q.candidates, warm_buf.data());
-            if (count_base != count_onpair_sorted || count_base != count_onpair_unsorted) {
-                std::cerr << "\n[FATAL] Warmup Count mismatch! Base=" << count_base << " OnPair Sorted=" << count_onpair_sorted << " OnPair Unsorted=" << count_onpair_unsorted << std::endl;
+        // Initialize Query Generator
+        QueryGenerator query_gen(data, end_positions);
+
+        // --- Warmup Phase ---
+        {
+            std::vector<size_t> warm_buf(n_elements);
+            auto warm_queries = query_gen.generate_queries(100);
+            for(const auto& q : warm_queries) {
+                size_t count_base = baseline.prefix_filtering(q, warm_buf.data());
+                size_t count_onpair_sorted = onpair_sorted.prefix_filtering_sorted(lpm_sorted, q, warm_buf.data());
+                size_t count_onpair_unsorted = onpair_unsorted.prefix_filtering_unsorted(lpm_unsorted, q, warm_buf.data());
+                if (count_base != count_onpair_sorted || count_base != count_onpair_unsorted) {
+                    std::cerr << "\n[FATAL] Warmup Count mismatch! Base=" << count_base << " OnPair Sorted=" << count_onpair_sorted << " OnPair Unsorted=" << count_onpair_unsorted << std::endl;
+                    exit(1);
+                }
+            }
+        }
+
+        // Generate queries
+        auto queries = query_gen.generate_queries(N_QUERIES);
+
+        // Run benchmark
+        for (const auto& q : queries) {
+            // 1. Measure Baseline
+            auto t0 = std::chrono::high_resolution_clock::now();
+            size_t count_base = baseline.prefix_filtering(q, buffer_base.data());
+            auto t1 = std::chrono::high_resolution_clock::now();
+            baseline_latencies.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count());
+
+            // 2. Measure OnPair Sorted
+            auto t2 = std::chrono::high_resolution_clock::now();
+            size_t count_onpair_sorted = onpair_sorted.prefix_filtering_sorted(lpm_sorted, q, buffer_onpair_sorted.data());
+            auto t3 = std::chrono::high_resolution_clock::now();
+            onpair_sorted_latencies.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2).count());
+
+            // 3. Measure OnPair Unsorted
+            auto t4 = std::chrono::high_resolution_clock::now();
+            size_t count_onpair_unsorted = onpair_unsorted.prefix_filtering_unsorted(lpm_unsorted, q, buffer_onpair_unsorted.data());
+            auto t5 = std::chrono::high_resolution_clock::now();
+            onpair_unsorted_latencies.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(t5 - t4).count());
+
+            // 4. Verify correctness
+            if(count_base != count_onpair_sorted || count_base != count_onpair_unsorted) {
+                std::cerr << "\n[FATAL] Count mismatch!" << std::endl;
+                exit(1);
+            }
+            if(count_base > 0 && std::memcmp(buffer_base.data(), buffer_onpair_sorted.data(), count_base * sizeof(size_t)) != 0) {
+                std::cerr << "\n[FATAL] Content mismatch!" << std::endl;
+                exit(1);
+            }
+            if(count_base > 0 && std::memcmp(buffer_base.data(), buffer_onpair_unsorted.data(), count_base * sizeof(size_t)) != 0) {
+                std::cerr << "\n[FATAL] Content mismatch!" << std::endl;
                 exit(1);
             }
         }
     }
 
-    // --- Benchmark prefix filtering ---
-    std::vector<size_t> buffer_base(n_elements);
-    std::vector<size_t> buffer_onpair_sorted(n_elements);
-    std::vector<size_t> buffer_onpair_unsorted(n_elements);
+    // Compute average latencies
+    double base_ns = std::accumulate(baseline_latencies.begin(), baseline_latencies.end(), 0.0) / baseline_latencies.size();
+    double onpair_sorted_ns = std::accumulate(onpair_sorted_latencies.begin(), onpair_sorted_latencies.end(), 0.0) / onpair_sorted_latencies.size();
+    double onpair_unsorted_ns = std::accumulate(onpair_unsorted_latencies.begin(), onpair_unsorted_latencies.end(), 0.0) / onpair_unsorted_latencies.size();
 
-    for(size_t n_candidates = 128; n_candidates < n_elements; n_candidates *=2) {
-        // --- Output Header ---
-        std::cout << std::endl;
-        std::cout << "================================================================================" << std::endl;
-        std::cout << "PREFIX FILTERING BENCHMARK" << std::endl;
-        std::cout << "Dataset: " << dataset_name << " | #Candidates: " << n_candidates << " | Queries: " << N_QUERIES << std::endl;
-        std::cout << "================================================================================" << std::endl;
-        std::cout << std::left 
-                << std::setw(18) << "Prefix Size (B)" 
-                << std::setw(18) << "Baseline (ms)" 
-                << std::setw(20) << "OnPair Sorted (ms)" 
-                << std::setw(22) << "OnPair Unsorted (ms)" 
-                << std::endl;
-        std::cout << "--------------------------------------------------------------------------------" << std::endl;
-        
-        for(size_t prefix_size = 4; prefix_size <= 64; prefix_size += 4) {
-            // Generate queries
-            auto queries = query_gen.generate_queries_random_access(N_QUERIES, n_candidates, prefix_size);
-            if(queries.size() < N_QUERIES) {
-                break; // Not enough queries could be generated
-            }
-            
-            size_t total_base_ns = 0;
-            size_t total_onpair_sorted_ns = 0;
-            size_t total_onpair_unsorted_ns = 0;
-            for (const auto& q : queries) {
-                // 1. Measure Baseline
-                auto t0 = std::chrono::high_resolution_clock::now();
-                size_t count_base = baseline.prefix_filtering(q.prefix, q.candidates, buffer_base.data());
-                auto t1 = std::chrono::high_resolution_clock::now();
-                total_base_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+    // --- Output Header ---
+    std::cout << std::endl;
+    std::cout << "================================================================" << std::endl;
+    std::cout << "PREFIX FILTERING BENCHMARK" << std::endl;
+    std::cout << "Dataset: " << dataset_name << " | Queries: " << N_QUERIES << "| Runs: " << N_RUNS << std::endl;
+    std::cout << "================================================================" << std::endl;
+    std::cout << std::left 
+            << std::setw(18) << "Baseline (ms)" 
+            << std::setw(20) << "OnPair Sorted (ms)" 
+            << std::setw(22) << "OnPair Unsorted (ms)" 
+            << std::endl;
+    std::cout << "================================================================" << std::endl;
+    
+    // Print Row
+    std::cout << std::left 
+            << std::setw(18) << std::fixed << std::setprecision(2) << base_ns / 1e6 
+            << std::setw(20) << std::fixed << std::setprecision(2) << onpair_sorted_ns / 1e6 
+            << std::setw(22) << std::fixed << std::setprecision(2) << onpair_unsorted_ns / 1e6
+            << std::endl;
 
-                // 2. Measure OnPair Sorted
-                auto t2 = std::chrono::high_resolution_clock::now();
-                size_t count_onpair_sorted = onpair_sorted.prefix_filtering_sorted(lpm_sorted, q.prefix, q.candidates, buffer_onpair_sorted.data());
-                auto t3 = std::chrono::high_resolution_clock::now();
-                total_onpair_sorted_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t3 - t2).count();
-
-                // 3. Measure OnPair Unsorted
-                auto t4 = std::chrono::high_resolution_clock::now();
-                size_t count_onpair_unsorted = onpair_unsorted.prefix_filtering_unsorted(lpm_unsorted, q.prefix, q.candidates, buffer_onpair_unsorted.data());
-                auto t5 = std::chrono::high_resolution_clock::now();
-                total_onpair_unsorted_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t5 - t4).count();
-
-                // 4. Verify correctness
-                if(count_base != count_onpair_sorted || count_base != count_onpair_unsorted) {
-                    std::cerr << "\n[FATAL] Count mismatch!" << std::endl;
-                    exit(1);
-                }
-                if(count_base > 0 && std::memcmp(buffer_base.data(), buffer_onpair_sorted.data(), count_base * sizeof(size_t)) != 0) {
-                    std::cerr << "\n[FATAL] Content mismatch!" << std::endl;
-                    exit(1);
-                }
-                if(count_base > 0 && std::memcmp(buffer_base.data(), buffer_onpair_unsorted.data(), count_base * sizeof(size_t)) != 0) {
-                    std::cerr << "\n[FATAL] Content mismatch!" << std::endl;
-                    exit(1);
-                }
-            }
-            
-            // Calculate Metrics
-            double base_ms = total_base_ns / 1e6;
-            double onpair_sorted_ms = total_onpair_sorted_ns / 1e6;
-            double onpair_unsorted_ms = total_onpair_unsorted_ns / 1e6;
-
-            // Print Row
-            std::cout << std::left 
-                    << std::setw(18) << std::fixed << std::setprecision(2) << prefix_size
-                    << std::setw(18) << std::fixed << std::setprecision(2) << base_ms 
-                    << std::setw(20) << std::fixed << std::setprecision(2) << onpair_sorted_ms 
-                    << std::setw(22) << std::fixed << std::setprecision(2) << onpair_unsorted_ms
-                    << std::endl;
-        }
-        std::cout << "================================================================================" << std::endl;
-    }
+    std::cout << "================================================================" << std::endl;
 
     return 0;
 }
