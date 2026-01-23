@@ -1,13 +1,24 @@
 /**
  * @file prefix_filtering.cpp
- * @brief Prefix Filtering Benchmark: Linear Scan vs. Compressed Domain Search.
+ * @brief Benchmark for Prefix Filtering: Linear Scan vs. Compressed Domain Search
  *
- * EVALUATION METHODOLOGY:
- * This benchmark evaluates the retrieval latency of prefix queries using a 
- * synthetic workload generated via Stratified Sampling. 
+ * This benchmark evaluates the efficiency of prefix filtering queries on string datasets
+ * using three approaches:
+ *   1. Baseline: Linear scan with std::memcmp over uncompressed data.
+ *   2. OnPair Sorted: Compressed Prefix filtering exploiting a sorted dictionary.
+ *   3. OnPair Unsorted: Control variable using an unsorted dictionary.
  *
- * * METRICS:
- * - Execution Time (ns): Accumulated latency over 10,000 queries.
+ * Output:
+ *   - Reports the average latency (in milliseconds) for each method across all queries and runs.
+ *
+ * Usage:
+ *   ./prefix_filtering <dataset_path> [core_id]
+ *
+ *   - <dataset_path>: Path to the input dataset (JSON format).
+ *   - [core_id]: (Optional) Pin the process to a specific CPU core.
+ *
+ * This benchmark is useful for quantifying the performance benefits of compressed domain search
+ * and validating the correctness of the OnPair prefix filtering implementations.
  */
 
 #include <iostream>

@@ -3,7 +3,7 @@
  * 
  * Provides efficient longest prefix matching using a hybrid approach:
  * - Short matches (≤8 bytes): Direct hash table lookup
- * - Long matches (>8 bytes): Bucketed by 8-byte prefix with suffix verification
+ * - Long matches (>8 bytes): Bucketed Trie structure
  */
 
 #ifndef LONGEST_PREFIX_MATCHER_H
