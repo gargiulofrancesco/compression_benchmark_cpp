@@ -474,3 +474,171 @@ std::vector<OnPairCompressor::TokenStats> OnPairCompressor::get_token_statistics
 
     return stats;
 }
+
+// PRE-CONDITION: Dictionary must be sorted lexicographically
+OnPairCompressor::PatternMatchTables OnPairCompressor::build_pattern_match_tables(
+    const std::vector<uint8_t>& pattern
+) const {
+    PatternMatchTables tables;
+    const size_t p_len = pattern.size();
+    tables.pattern_length = p_len;
+
+    if (p_len == 0) {
+        size_t num_tokens = token_boundaries.size() - 1;
+        tables.base.assign(num_tokens, 0);
+        return tables;
+    }
+
+    // Build standard KMP LPS (failure) table
+    std::vector<size_t> lps(p_len, 0);
+    {
+        size_t len = 0;
+        size_t i = 1;
+        while (i < p_len) {
+            if (pattern[i] == pattern[len]) {
+                lps[i++] = ++len;
+            } else if (len > 0) {
+                len = lps[len - 1];
+            } else {
+                lps[i++] = 0;
+            }
+        }
+    }
+
+    const size_t num_tokens = token_boundaries.size() - 1;
+    const uint8_t* dict_base = dictionary.data();
+    const uint32_t* boundaries = token_boundaries.data();
+    const uint8_t* p_data = pattern.data();
+
+    // Lambda: run KMP from a given start state over a token's bytes
+    // Uses the Early Match Rule: returns p_len immediately on match
+    auto run_kmp = [&](size_t start_state, size_t token_start, size_t token_len) -> uint8_t {
+        size_t state = start_state;
+        const uint8_t* token_ptr = dict_base + token_start;
+        for (size_t i = 0; i < token_len; i++) {
+            while (state > 0 && p_data[state] != token_ptr[i]) {
+                state = lps[state - 1];
+            }
+            if (p_data[state] == token_ptr[i]) {
+                state++;
+            }
+            if (state == p_len) {
+                return static_cast<uint8_t>(p_len); // Early Match Rule
+            }
+        }
+        return static_cast<uint8_t>(state);
+    };
+
+    // 1. Base Pass: run KMP from state 0 on each token
+    tables.base.resize(num_tokens);
+    for (size_t t = 0; t < num_tokens; t++) {
+        size_t t_start = boundaries[t];
+        size_t t_len = boundaries[t + 1] - t_start;
+        tables.base[t] = run_kmp(0, t_start, t_len);
+    }
+
+    // 2. Bridge Pass: for each state j from 1 to p_len - 1
+    //    Check all characters reachable via the failure chain from state j.
+    //    At state j, if the first byte c of a token triggers a different KMP
+    //    transition than from state 0, the final state for the whole token may
+    //    differ from Base. The reachable characters are P[s] for every s > 0
+    //    along the failure chain: j, lps[j-1], lps[lps[j-1]-1], ...
+    std::vector<uint8_t> relevant_chars;
+    relevant_chars.reserve(p_len);
+    for (size_t j = 1; j < p_len; j++) {
+        // Collect all relevant first bytes from the failure chain
+        size_t s = j;
+        while (s > 0) {
+            relevant_chars.push_back(pattern[s]);
+            s = lps[s - 1];
+        }
+
+        // Deduplicate relevant characters (there can be duplicates along the failure chain)
+        std::sort(relevant_chars.begin(), relevant_chars.end());
+        relevant_chars.erase(std::unique(relevant_chars.begin(), relevant_chars.end()), relevant_chars.end());
+
+        // For each relevant character, find all tokens starting with that character and run KMP from state j
+        for(uint8_t c : relevant_chars){
+            // Find tokens starting with c using binary search (sorted dictionary)
+            uint32_t lb = lower_bound(&c, 1);
+            uint32_t ub;
+            if (c < 255) {
+                uint8_t next_c = c + 1;
+                ub = lower_bound(&next_c, 1);
+            } else {
+                ub = static_cast<uint32_t>(num_tokens);
+            }
+
+            for (uint32_t t = lb; t < ub; t++) {
+                size_t t_start = boundaries[t];
+                size_t t_len = boundaries[t + 1] - t_start;
+
+                uint8_t final_state = run_kmp(j, t_start, t_len);
+
+                // Store if result differs from Base behavior
+                if (final_state != tables.base[t]) {
+                    uint32_t key = (static_cast<uint32_t>(t) << 16) | static_cast<uint32_t>(j);
+                    tables.bridge[key] = final_state;
+                }
+            }
+        }
+
+        relevant_chars.clear();
+    }
+
+    return tables;
+}
+
+size_t OnPairCompressor::pattern_matching(
+    const PatternMatchTables& tables, 
+    size_t* buffer
+) const {
+    size_t match_count = 0;
+    const uint8_t match_state = static_cast<uint8_t>(tables.pattern_length);
+
+    if (tables.pattern_length == 0) {
+        for (size_t idx = 0; idx < string_boundaries.size() - 1; ++idx) {
+            buffer[match_count++] = idx;
+        }
+        return match_count;
+    }
+
+    const uint16_t* compressed_base = compressed_data.data();
+    const size_t* boundaries_ptr = string_boundaries.data();
+    const uint8_t* base_ptr = tables.base.data();
+
+    for (size_t idx = 0; idx < string_boundaries.size() - 1; ++idx) {
+        size_t start = boundaries_ptr[idx];
+        size_t end = boundaries_ptr[idx + 1];
+
+        uint8_t state = 0;
+        bool found = false;
+
+        for (size_t i = start; i < end; ++i) {
+            uint16_t token = compressed_base[i];
+
+            if (state > 0) {
+                uint32_t key = (static_cast<uint32_t>(token) << 16) | static_cast<uint32_t>(state);
+                auto it = tables.bridge.find(key);
+                if (it != tables.bridge.end()) {
+                    state = it->second;
+                } else {
+                    state = base_ptr[token];
+                }
+            } else {
+                state = base_ptr[token];
+            }
+
+            if (state == match_state) {
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            buffer[match_count++] = idx;
+        }
+    }
+
+    return match_count;
+}

@@ -57,6 +57,70 @@ size_t RawCompressor::prefix_filtering(const std::vector<uint8_t>& prefix, size_
     return count;
 }
 
+size_t RawCompressor::pattern_matching(const std::vector<uint8_t>& pattern, size_t* buffer) const {
+    size_t count = 0;
+    const size_t p_len = pattern.size();
+
+    if (p_len == 0) {
+        for (size_t idx = 0; idx < offsets.size() - 1; ++idx) {
+            buffer[count++] = idx;
+        }
+        return count;
+    }
+
+    // Build KMP failure function (LPS table)
+    std::vector<size_t> lps(p_len, 0);
+    {
+        size_t len = 0;
+        size_t i = 1;
+        while (i < p_len) {
+            if (pattern[i] == pattern[len]) {
+                lps[i++] = ++len;
+            } else if (len > 0) {
+                len = lps[len - 1];
+            } else {
+                lps[i++] = 0;
+            }
+        }
+    }
+
+    const uint8_t* p_data = pattern.data();
+    const size_t* offsets_ptr = offsets.data();
+    const uint8_t* data_base = uncompressed_data.data();
+
+    for (size_t idx = 0; idx < offsets.size() - 1; ++idx) {
+        size_t start = offsets_ptr[idx];
+        size_t len = offsets_ptr[idx + 1] - start;
+
+        // Length Filter
+        if (len < p_len) continue;
+
+        // KMP Search
+        const uint8_t* text = data_base + start;
+        size_t state = 0;
+        bool found = false;
+
+        for (size_t i = 0; i < len; ++i) {
+            while (state > 0 && p_data[state] != text[i]) {
+                state = lps[state - 1];
+            }
+            if (p_data[state] == text[i]) {
+                state++;
+            }
+            if (state == p_len) {
+                found = true;
+                break;
+            }
+        }
+
+        if (found) {
+            buffer[count++] = idx;
+        }
+    }
+
+    return count;
+}
+
 size_t RawCompressor::space_used_bytes() const {
     return uncompressed_data.size();
 }

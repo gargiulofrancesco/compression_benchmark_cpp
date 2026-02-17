@@ -20,6 +20,9 @@ public:
 
     // Prefix filtering using std::memcmp
     size_t prefix_filtering(const std::vector<uint8_t>& prefix, size_t* buffer) const;
+
+    // Pattern matching using KMP (LIKE '%P%')
+    size_t pattern_matching(const std::vector<uint8_t>& pattern, size_t* buffer) const;
 };
 
 #endif // RAW_COMPRESSOR_H

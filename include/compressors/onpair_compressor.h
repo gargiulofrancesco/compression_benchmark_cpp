@@ -43,6 +43,16 @@ public:
     size_t prefix_filtering_sorted(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const;
     size_t prefix_filtering_unsorted(const LongestPrefixMatcher<uint16_t>& lpm, const std::vector<uint8_t>& prefix, size_t* buffer) const;
 
+    // Pattern matching (LIKE '%P%') on compressed data
+    struct PatternMatchTables {
+        std::vector<uint8_t> base;    // base[token_id] = final KMP state from state 0
+        robin_hood::unordered_map<uint32_t, uint8_t> bridge; // key = (token_id << 16) | state
+        size_t pattern_length;
+    };
+
+    PatternMatchTables build_pattern_match_tables(const std::vector<uint8_t>& pattern) const;
+    size_t pattern_matching(const PatternMatchTables& tables, size_t* buffer) const;
+
     // Analysis
     struct TokenStats {
         uint16_t id;

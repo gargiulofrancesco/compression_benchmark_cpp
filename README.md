@@ -140,16 +140,3 @@ All datasets follow a simple JSON array format:
 
 Custom datasets can be added by following this format.
 
-## Extending the Framework
-
-### Adding New Compression Algorithms
-
-1. Implement the `Compressor` interface in `src/compressors/`
-2. Register in `src/compressors/compressor_factory.cpp`
-3. Rebuild and run with algorithm name
-
-### Adding New Datasets
-
-1. Create JSON file following the format above
-2. Place in `data/` directory
-3. Run benchmarks as normal
