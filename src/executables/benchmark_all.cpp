@@ -21,13 +21,13 @@
 #include "benchmark_utils.h"
 
 // Compression algorithms under evaluation
-const std::vector<std::string> COMPRESSORS = {"raw", "onpair", "onpair16", "fsst", "bpe"};
+const std::vector<std::string> COMPRESSORS = {"raw", "onpair", "fsst"};
 // Path to individual benchmark executable
 const std::string BENCHMARK_PATH = "./benchmark_individual";
 // Output file for aggregated benchmark results
 const std::string OUTPUT_FILE = "benchmark_results.json";
 // Number of iterations per algorithm-dataset combination for statistical robustness
-const size_t N_ITERATIONS = 15;
+const size_t N_ITERATIONS = 3;
 
 /**
  * Main benchmark orchestrator

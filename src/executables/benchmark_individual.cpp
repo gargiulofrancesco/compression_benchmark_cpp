@@ -27,12 +27,8 @@
 #include "brotli_compressor.h"
 #include "deflate_compressor.h"
 #include "zstd_compressor.h"
-#include "onpair16_compressor.h"
 #include "onpair_compressor.h"
-#include "onpair_bv_compressor.h"
 #include "deflate_individual_compressor.h"
-#include "bpe_compressor.h"
-#include "sampled_bpe_compressor.h"
 #include "benchmark_utils.h"
 
 // Number of random access queries for latency measurement
@@ -196,28 +192,12 @@ int main(int argc, char* argv[]) {
             FSSTBlockCompressor compressor = FSSTBlockCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
-        else if (compressor_name == "onpair16") {
-            OnPair16Compressor compressor = OnPair16Compressor::create(data.size(), end_positions.size()-1);
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        }
         else if (compressor_name == "onpair") {
             OnPairCompressor compressor = OnPairCompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
-        else if (compressor_name == "onpair_bv") {
-            OnPairBVCompressor compressor = OnPairBVCompressor::create(data.size(), end_positions.size()-1);
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        }
         else if (compressor_name == "deflate_individual") {
             DeflateIndividualCompressor compressor = DeflateIndividualCompressor::create(data.size(), end_positions.size()-1);
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        }
-        else if (compressor_name == "bpe") {
-            BPECompressor compressor = BPECompressor::create(data.size(), end_positions.size()-1);
-            result = benchmark(compressor, dataset_name, data, end_positions, queries);
-        }
-        else if (compressor_name == "sampled_bpe") {
-            SampledBPECompressor compressor = SampledBPECompressor::create(data.size(), end_positions.size()-1);
             result = benchmark(compressor, dataset_name, data, end_positions, queries);
         }
         else {

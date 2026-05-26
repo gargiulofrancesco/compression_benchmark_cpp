@@ -76,8 +76,8 @@ Evaluate a specific algorithm on a dataset:
 
 **Example:**
 ```bash
-# Run onpair16 algorithm on example dataset with CPU core pinning
-./benchmark_individual data/example.json onpair16 results.json 0
+# Run onpair algorithm on example dataset with CPU core pinning
+./benchmark_individual data/example.json onpair results.json 0
 ```
 
 #### Comprehensive Benchmark Suite
@@ -107,12 +107,8 @@ This generates a comprehensive performance comparison across all algorithms and 
 | `snappy` | Google's Snappy compression |
 | `xz` | XZ compression |
 | `zstd` | Facebook's Zstandard compression |
-| `bpe` | Byte Pair Encoding |
-| `sampled_bpe` | Sampled Byte Pair Encoding |
 | `fsst` | Fast Static Symbol Table compression |
 | `onpair` | OnPair algorithm |
-| `onpair_bv` | OnPair with bit vectors |
-| `onpair16` | OnPair with 16-byte limits |
 
 ## Dataset Format
 
